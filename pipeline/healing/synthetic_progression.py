@@ -5,9 +5,11 @@ Since we usually only have ONE image per patient (day 0), we simulate
 what the wound might look like on days 7, 14, and 21 so XGBoost has
 enough time points to work with.
 
-This is obviously a simplification — in a real deployment, we'd use
-actual follow-up images. But for the demo pipeline, synthetic data lets
-us show the full flow end-to-end.
+CAVEAT: This uses simple morphological operations (erosion/dilation)
+which don't capture real wound healing biology (irregular granulation,
+depth changes, edge effects). This is acceptable for a demo pipeline
+but should not be presented as biologically accurate simulation.
+In a real deployment, actual follow-up images would replace this.
 """
 
 import cv2
@@ -28,9 +30,11 @@ def generate_healing_sequence(base_mask: np.ndarray, seed=42) -> dict:
     sequence = {HEALING_DAYS[0]: base_mask.copy()}
 
     current = base_mask.copy()
-    # Each week we erode a bit more than the previous — wound getting smaller
     for i, day in enumerate(HEALING_DAYS[1:], 1):
         current = cv2.erode(current, kernel, iterations=2 * i)
+        # Ensure mask stays valid (at least some pixels)
+        if current.sum() < 50:
+            current = sequence[HEALING_DAYS[i - 1]].copy()
         sequence[day] = current.copy()
 
     return sequence
@@ -51,35 +55,69 @@ def generate_non_healing_sequence(base_mask: np.ndarray, seed=42) -> dict:
     return sequence
 
 
-def generate_tissue_progression(mode="healing", seed=42) -> dict:
+def generate_tissue_progression(mode="healing", seed=42,
+                                 day0_tissue=None) -> dict:
     """
     Simulate how tissue composition changes over time.
-    Healing: granulation goes UP, necrosis goes DOWN (wound filling in).
-    Non-healing: necrosis stays high, nothing improves.
+
+    If day0_tissue is provided (from the real ResNet18 classifier output),
+    we use it as the starting point and simulate realistic changes from there.
+    Otherwise we fall back to fully synthetic values.
+
+    Args:
+        mode:         "healing" or "non_healing"
+        seed:         random seed for noise
+        day0_tissue:  optional dict with granulation_pct, slough_pct, necrosis_pct
+                      from the actual tissue classifier (Step 2)
+
+    Returns:
+        {day: {"granulation_pct": ..., "slough_pct": ..., "necrosis_pct": ...}}
     """
     rng = np.random.default_rng(seed)
 
-    if mode == "healing":
-        # Good trajectory — healthy tissue gradually taking over
-        progression = {
-            0:  {"granulation_pct": 30, "slough_pct": 40, "necrosis_pct": 30},
-            7:  {"granulation_pct": 45, "slough_pct": 35, "necrosis_pct": 20},
-            14: {"granulation_pct": 60, "slough_pct": 28, "necrosis_pct": 12},
-            21: {"granulation_pct": 75, "slough_pct": 20, "necrosis_pct":  5},
-        }
-    else:
-        # Bad trajectory — stuck or getting worse
-        progression = {
-            0:  {"granulation_pct": 20, "slough_pct": 35, "necrosis_pct": 45},
-            7:  {"granulation_pct": 22, "slough_pct": 38, "necrosis_pct": 40},
-            14: {"granulation_pct": 18, "slough_pct": 37, "necrosis_pct": 45},
-            21: {"granulation_pct": 20, "slough_pct": 35, "necrosis_pct": 45},
-        }
+    if day0_tissue is not None:
+        # Use real classifier output as Day-0 baseline
+        g0 = day0_tissue.get("granulation_pct", 30)
+        s0 = day0_tissue.get("slough_pct", 40)
+        n0 = day0_tissue.get("necrosis_pct", 30)
 
-    # Add a bit of Gaussian noise so the synthetic data doesn't look too "perfect"
+        if mode == "healing":
+            # Healing: granulation increases, necrosis/slough decrease
+            progression = {
+                0:  {"granulation_pct": g0, "slough_pct": s0, "necrosis_pct": n0},
+                7:  {"granulation_pct": g0 + 15, "slough_pct": s0 - 5, "necrosis_pct": n0 - 10},
+                14: {"granulation_pct": g0 + 30, "slough_pct": s0 - 12, "necrosis_pct": n0 - 18},
+                21: {"granulation_pct": g0 + 45, "slough_pct": s0 - 20, "necrosis_pct": n0 - 25},
+            }
+        else:
+            # Non-healing: tissue composition stagnates
+            progression = {
+                0:  {"granulation_pct": g0, "slough_pct": s0, "necrosis_pct": n0},
+                7:  {"granulation_pct": g0 + 2, "slough_pct": s0 + 3, "necrosis_pct": n0 - 5},
+                14: {"granulation_pct": g0 - 2, "slough_pct": s0 + 2, "necrosis_pct": n0},
+                21: {"granulation_pct": g0, "slough_pct": s0, "necrosis_pct": n0},
+            }
+    else:
+        # Fully synthetic — no real tissue data available
+        if mode == "healing":
+            progression = {
+                0:  {"granulation_pct": 30, "slough_pct": 40, "necrosis_pct": 30},
+                7:  {"granulation_pct": 45, "slough_pct": 35, "necrosis_pct": 20},
+                14: {"granulation_pct": 60, "slough_pct": 28, "necrosis_pct": 12},
+                21: {"granulation_pct": 75, "slough_pct": 20, "necrosis_pct":  5},
+            }
+        else:
+            progression = {
+                0:  {"granulation_pct": 20, "slough_pct": 35, "necrosis_pct": 45},
+                7:  {"granulation_pct": 22, "slough_pct": 38, "necrosis_pct": 40},
+                14: {"granulation_pct": 18, "slough_pct": 37, "necrosis_pct": 45},
+                21: {"granulation_pct": 20, "slough_pct": 35, "necrosis_pct": 45},
+            }
+
+    # Add noise and clamp to valid range [0, 100]
     for day in progression:
         for key in progression[day]:
             noise = rng.normal(0, 2)
-            progression[day][key] = max(0, progression[day][key] + noise)
+            progression[day][key] = max(0, min(100, progression[day][key] + noise))
 
     return progression

@@ -40,8 +40,33 @@ def test_build_features_table():
 
     assert len(features) == 1
     assert "initial_area" in features.columns
-    assert "pct_area_reduction" in features.columns
-    assert features.iloc[0]["pct_area_reduction"] == 0.6  # (1000-400)/1000
+    assert "pct_area_change" in features.columns
+    assert "area_trend_slope" in features.columns
+    assert "mean_granulation" in features.columns
+    assert "mean_necrosis" in features.columns
+    assert features.iloc[0]["pct_area_change"] == 0.6  # (1000-400)/1000
+
+
+def test_build_features_table_tissue_features():
+    """Tissue features should reflect actual input data."""
+    from pipeline.healing.features import build_features_table
+
+    df = pd.DataFrame({
+        "wound_id": ["W1"] * 4,
+        "day": [0, 7, 14, 21],
+        "area_pixels": [1000, 800, 600, 400],
+        "granulation_pct": [20, 40, 60, 80],
+        "slough_pct": [40, 30, 20, 10],
+        "necrosis_pct": [40, 30, 20, 10],
+    })
+
+    features = build_features_table(df)
+    row = features.iloc[0]
+
+    assert row["mean_granulation"] == 50.0   # mean of [20, 40, 60, 80]
+    assert row["mean_necrosis"] == 25.0      # mean of [40, 30, 20, 10]
+    assert row["granulation_trend"] == 60.0  # 80 - 20
+    assert row["necrosis_trend"] == -30.0    # 10 - 40
 
 
 def test_rule_baseline():
@@ -69,6 +94,20 @@ def test_longitudinal_dataset():
         "wound_id", "day", "area_pixels",
         "granulation_pct", "slough_pct", "necrosis_pct"
     ]
+
+
+def test_tissue_progression_uses_real_baseline():
+    """Tissue progression should use real Day-0 data when provided."""
+    from pipeline.healing.synthetic_progression import generate_tissue_progression
+
+    real_tissue = {"granulation_pct": 85, "slough_pct": 10, "necrosis_pct": 5}
+    progression = generate_tissue_progression(
+        mode="healing", seed=42, day0_tissue=real_tissue
+    )
+
+    # Day 0 should start near the real values (with noise)
+    day0 = progression[0]
+    assert abs(day0["granulation_pct"] - 85) < 10  # within noise margin
 
 
 if __name__ == "__main__":

@@ -5,6 +5,7 @@ YOLO gives us a rough bounding box around the wound. MedSAM then uses
 that box as a prompt to produce a precise pixel-level mask.
 """
 
+import logging
 import cv2
 import numpy as np
 import torch
@@ -16,6 +17,8 @@ from pipeline.config import (
 from pipeline.schemas import SegmentationResult
 from .preprocess import load_image_rgb, resize_to_1024
 from .utils import postprocess_mask, extract_wound_crop, create_overlay, compute_area
+
+logger = logging.getLogger(__name__)
 
 
 @torch.no_grad()   # inference only — no need to track gradients
@@ -33,22 +36,25 @@ def segment_wound(img_rgb, yolo_model, sam_model, device,
         pad:        pixels of padding to add around the YOLO bbox
 
     Returns:
-        mask:       1024x1024 binary mask (uint8)
-        yolo_conf:  YOLO confidence (0.0 if YOLO missed and we fell back)
-        bbox:       [x1, y1, x2, y2] the bbox we used (in 1024 space)
+        mask:             1024x1024 binary mask (uint8)
+        yolo_conf:        YOLO confidence (0.0 if YOLO missed)
+        bbox:             [x1, y1, x2, y2] the bbox we used (in 1024 space)
+        detection_failed: True if YOLO found nothing and we used a fallback
     """
     H, W = img_rgb.shape[:2]
     yolo_conf = 0.0
+    detection_failed = False
 
     # ── Step 1: YOLO finds the wound bbox ────────────────
     results = yolo_model(img_rgb, conf=YOLO_CONF, verbose=False)
     boxes = results[0].boxes
 
     if len(boxes) == 0:
-        # YOLO didn't find anything — fall back to assuming wound is centered.
-        # Better than nothing but not great, this usually means the image is
-        # too far out of distribution for the detector.
-        print("  [seg] YOLO found no wound — falling back to centre crop")
+        # YOLO didn't find anything — fall back to centre crop.
+        # Flag this clearly so downstream callers know the result is unreliable.
+        detection_failed = True
+        logger.warning("  [seg] YOLO found no wound — falling back to centre crop. "
+                       "Detection confidence set to 0.0.")
         bbox = np.array([W // 4, H // 4, 3 * W // 4, 3 * H // 4])
     else:
         # Pick the highest-confidence detection
@@ -59,14 +65,14 @@ def segment_wound(img_rgb, yolo_model, sam_model, device,
         # Scale the bbox from the original image size to 1024 (MedSAM's input size)
         scale_x = SEG_INPUT_SIZE / W
         scale_y = SEG_INPUT_SIZE / H
-        # Expand the bbox a bit with padding so MedSAM has some context around the wound
+        # Expand the bbox a bit with padding so MedSAM has some context
         bbox = np.array([
             max(0, x1 * scale_x - pad),
             max(0, y1 * scale_y - pad),
             min(SEG_INPUT_SIZE, x2 * scale_x + pad),
             min(SEG_INPUT_SIZE, y2 * scale_y + pad)
         ])
-        print(f"  [seg] YOLO conf={yolo_conf:.3f} bbox={bbox.astype(int)}")
+        logger.info(f"  [seg] YOLO conf={yolo_conf:.3f} bbox={bbox.astype(int)}")
 
     # ── Step 2: MedSAM segments the wound using the bbox as prompt ──
     img_1024 = resize_to_1024(img_rgb)
@@ -98,17 +104,27 @@ def segment_wound(img_rgb, yolo_model, sam_model, device,
     # Clean up stray pixels and smooth edges
     mask = postprocess_mask(mask)
 
-    return mask, yolo_conf, bbox.astype(int).tolist()
+    return mask, yolo_conf, bbox.astype(int).tolist(), detection_failed
 
 
 def run_segmentation(image_path, yolo_model, sam_model, device,
-                     image_id="image", save=True) -> SegmentationResult:
+                     image_id="image", save=True,
+                     img_rgb=None) -> SegmentationResult:
     """
     High-level entry point. Loads the image, runs segmentation,
     optionally saves all the outputs to disk, and returns a structured result.
+
+    Args:
+        image_path:  path to the wound image
+        img_rgb:     optional pre-loaded image array (avoids double-loading)
     """
-    img_rgb = load_image_rgb(image_path)
-    mask, yolo_conf, bbox = segment_wound(img_rgb, yolo_model, sam_model, device)
+    # Use pre-loaded image if provided, otherwise load from disk
+    if img_rgb is None:
+        img_rgb = load_image_rgb(image_path)
+
+    mask, yolo_conf, bbox, detection_failed = segment_wound(
+        img_rgb, yolo_model, sam_model, device
+    )
 
     area_px = compute_area(mask)
     mask_path = ""
@@ -116,8 +132,6 @@ def run_segmentation(image_path, yolo_model, sam_model, device,
     crop_path = ""
 
     if save:
-        # Wrapping in try/except because OneDrive sometimes locks files
-        # while syncing — we don't want that to crash the whole pipeline.
         try:
             # 1. Binary mask as PNG (multiplied by 255 so it's visible)
             mask_path = str(MASKS_DIR / f"{image_id}_mask.png")
@@ -132,8 +146,8 @@ def run_segmentation(image_path, yolo_model, sam_model, device,
             crop = extract_wound_crop(img_rgb, mask)
             crop_path = str(CROPS_DIR / f"{image_id}_crop.png")
             cv2.imwrite(crop_path, cv2.cvtColor(crop, cv2.COLOR_RGB2BGR))
-        except PermissionError as e:
-            print(f"  [seg] Warning: could not save some files: {e}")
+        except PermissionError:
+            logger.warning("  [seg] Could not save some files (disk write blocked)")
 
     return SegmentationResult(
         image_id=image_id,
@@ -142,5 +156,7 @@ def run_segmentation(image_path, yolo_model, sam_model, device,
         crop_path=crop_path,
         area_px=area_px,
         bbox=bbox,
-        yolo_conf=yolo_conf
+        yolo_conf=yolo_conf,
+        detection_failed=detection_failed,
+        mask=mask,
     )

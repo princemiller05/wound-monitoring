@@ -6,8 +6,15 @@ Keeping them in one file means we don't have to dig through the code
 every time we want to change a path or tune a threshold.
 """
 
+import logging
 import os
 from pathlib import Path
+
+# ─── Logging Setup ─────────────────────────────────────────────
+# Use Python logging instead of print() so callers can control verbosity.
+# Set to logging.DEBUG for development, logging.WARNING for production.
+LOG_FORMAT = "%(asctime)s [%(name)s] %(levelname)s: %(message)s"
+LOG_LEVEL = logging.INFO
 
 # ─── Project Root ───────────────────────────────────────────────
 # This resolves to the dfu_pipeline/ folder no matter where you run from.
@@ -36,6 +43,10 @@ TISSUE_PRED_DIR  = OUTPUT_DIR / "tissue_preds"    # tissue classification maps
 HEALING_DIR      = OUTPUT_DIR / "healing"         # healing plots + CSVs
 METRICS_DIR      = OUTPUT_DIR / "metrics"         # reserved for eval metrics
 
+# ─── Input Validation ──────────────────────────────────────────
+SUPPORTED_FORMATS = {".jpg", ".jpeg", ".png", ".bmp", ".tiff"}
+MAX_IMAGE_PIXELS  = 50_000_000  # reject images larger than ~50MP to cap memory
+
 # ─── Segmentation Settings ──────────────────────────────────────
 SEG_INPUT_SIZE    = 1024   # MedSAM was trained on 1024x1024 inputs, don't change
 SEG_THRESHOLD     = 0.5    # probability cutoff to binarize the mask
@@ -51,11 +62,12 @@ TISSUE_MEAN       = [0.485, 0.456, 0.406]   # ImageNet normalization
 TISSUE_STD        = [0.229, 0.224, 0.225]
 
 # Color map used when drawing the tissue classification overlay.
-# Matches the colors Subham used in his training labels so the output is consistent.
+# Yellow for slough matches Subham's training labels (gran_mask=[255,0,0],
+# slough_mask=[255,255,0], necro_mask=[0,0,0]).
 TISSUE_COLORS = {
-    "granulation": (255, 0, 0),     # red  — healthy healing tissue
-    "necrosis":    (0, 0, 0),       # black — dead tissue (bad sign)
-    "slough":      (255, 255, 255), # white — dead skin / wound fluid
+    "granulation": (255, 0, 0),     # red    — healthy healing tissue
+    "necrosis":    (0, 0, 0),       # black  — dead tissue (bad sign)
+    "slough":      (255, 255, 0),   # yellow — dead skin / wound fluid
 }
 
 # ─── Healing Prediction Settings ────────────────────────────────
@@ -64,12 +76,18 @@ HEALING_THRESHOLD  = 0.5              # XGBoost prob cutoff: >= this → "healin
 RULE_REDUCTION_THR = 0.30             # clinical rule: 30% area reduction = healing
 
 # Columns that go into the XGBoost model (must match training!)
+# Includes both area-based and tissue-based features so the tissue
+# classifier's output actually influences the healing prediction.
 FEATURE_COLS = [
     "initial_area",
     "final_area",
-    "pct_area_reduction",
+    "pct_area_change",        # renamed from pct_area_reduction (can be negative)
     "mean_area",
-    "std_area",
+    "area_trend_slope",       # linear regression slope (replaces noisy std_area)
+    "mean_granulation",       # avg granulation % across time points
+    "mean_necrosis",          # avg necrosis % across time points
+    "granulation_trend",      # change in granulation from first to last day
+    "necrosis_trend",         # change in necrosis from first to last day
 ]
 
 # ─── Naming Convention ──────────────────────────────────────────

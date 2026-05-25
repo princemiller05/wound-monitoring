@@ -4,12 +4,19 @@ Build the feature tables that XGBoost needs.
 Two levels:
   1. Longitudinal dataset — one row per (wound, day) — all the raw measurements
   2. Feature table — one row per wound — summary stats used for prediction
+
+The feature table includes both area-based features (how wound size changes)
+and tissue-based features (how tissue composition changes). This ensures
+the tissue classifier's output actually influences the healing prediction.
 """
 
+import logging
 import numpy as np
 import pandas as pd
 
-from pipeline.config import HEALING_DAYS, FEATURE_COLS
+from pipeline.config import FEATURE_COLS
+
+logger = logging.getLogger(__name__)
 
 
 def build_longitudinal_dataset(wound_id: str, masks_dict: dict,
@@ -37,7 +44,7 @@ def build_longitudinal_dataset(wound_id: str, masks_dict: dict,
             "area_pixels": area,
         }
 
-        # If we have tissue data for this day, pull it in. Otherwise zeros.
+        # Pull in tissue data if available, otherwise default to zeros.
         if tissue_dict and day in tissue_dict:
             row["granulation_pct"] = tissue_dict[day].get("granulation_pct", 0)
             row["slough_pct"]      = tissue_dict[day].get("slough_pct", 0)
@@ -56,34 +63,53 @@ def build_features_table(longitudinal_df: pd.DataFrame) -> pd.DataFrame:
     """
     Collapse the per-day data into one row per wound with summary features.
 
-    Features used:
-        - initial_area       (area on day 0)
-        - final_area         (area on last day)
-        - pct_area_reduction (how much it shrank, as a fraction)
-        - mean_area          (average across all days)
-        - std_area           (how much it varied)
+    Features (must match FEATURE_COLS in config.py and training script):
+        Area-based:
+        - initial_area        — area on day 0
+        - final_area          — area on last day
+        - pct_area_change     — fraction change (positive = shrinking = good)
+        - mean_area           — average across all days
+        - area_trend_slope    — linear regression slope (more stable than std)
 
-    These are what XGBoost was trained on.
+        Tissue-based (from the actual ResNet18 classifier output):
+        - mean_granulation    — average granulation % across time points
+        - mean_necrosis       — average necrosis % across time points
+        - granulation_trend   — change in granulation from first to last day
+        - necrosis_trend      — change in necrosis from first to last day
     """
     features = []
 
-    # Loop one wound at a time
     for wound_id, group in longitudinal_df.groupby("wound_id"):
         group = group.sort_values("day")
         areas = group["area_pixels"].values
 
         initial = areas[0]
         final = areas[-1]
-        # Guard against divide-by-zero if somehow the initial area is 0
-        reduction = (initial - final) / initial if initial > 0 else 0.0
+        # pct_area_change: positive means wound shrank, negative means it grew
+        change = (initial - final) / initial if initial > 0 else 0.0
+
+        # Linear regression slope over area trajectory — more robust than std
+        # with only 4 data points (reviewer feedback 5.2, N4)
+        if len(areas) >= 2:
+            slope = float(np.polyfit(range(len(areas)), areas, 1)[0])
+        else:
+            slope = 0.0
+
+        # Tissue composition features
+        gran_vals = group["granulation_pct"].values
+        necro_vals = group["necrosis_pct"].values
 
         feat = {
             "wound_id": wound_id,
             "initial_area": initial,
             "final_area": final,
-            "pct_area_reduction": round(reduction, 6),
-            "mean_area": round(np.mean(areas), 2),
-            "std_area": round(np.std(areas), 2),
+            "pct_area_change": round(change, 6),
+            "mean_area": round(float(np.mean(areas)), 2),
+            "area_trend_slope": round(slope, 2),
+            "mean_granulation": round(float(np.mean(gran_vals)), 2),
+            "mean_necrosis": round(float(np.mean(necro_vals)), 2),
+            "granulation_trend": round(float(gran_vals[-1] - gran_vals[0]), 2),
+            "necrosis_trend": round(float(necro_vals[-1] - necro_vals[0]), 2),
         }
         features.append(feat)
 

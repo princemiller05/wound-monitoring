@@ -1,8 +1,10 @@
 # AI-Assisted Remote Wound Monitoring System for Telehealth Applications
 
-An end-to-end pipeline for analyzing **Diabetic Foot Ulcers (DFUs)** from a single photograph. It tells you how big the wound is, what kind of tissue it's made of, and whether it's likely to heal.
+> **Disclaimer:** This is a research prototype developed as a university group project. It is **not** intended for clinical decision-making. The healing prediction is based on simulated wound progression from a single photograph — not real multi-visit patient data. Do not use this system to make medical decisions.
 
-Built as part of a group project for remote telehealth applications. Three modules — **wound segmentation**, **tissue classification**, and **healing prediction** — now chained into one clean pipeline you can run with a single command.
+An end-to-end pipeline for analyzing **Diabetic Foot Ulcers (DFUs)** from a single photograph. It segments the wound, classifies the tissue composition, and estimates a healing trajectory.
+
+Built as part of a group project for remote telehealth applications. Three modules — **wound segmentation**, **tissue classification**, and **healing prediction** — chained into one clean pipeline you can run with a single command.
 
 ---
 
@@ -12,7 +14,7 @@ Give it a wound photo. Get back:
 
 1. **A segmentation mask** — exactly where the wound is (pixel level)
 2. **A tissue breakdown** — how much is granulation (healthy), slough, or necrosis
-3. **A healing prediction** — probability that this wound will heal, with reasoning
+3. **A healing estimate** — probability score based on simulated 21-day progression
 
 All the intermediate images (masks, overlays, tissue maps, trend plots) get saved to disk so you can see exactly what the pipeline is doing at each step.
 
@@ -31,15 +33,16 @@ All the intermediate images (masks, overlays, tissue maps, trend plots) get save
        │
        ▼
 ┌──────────────────────┐
-│  2. Tissue Classify  │   ResNet18 slides across wound region,
-│  (Subham)            │   classifying 64x64 patches as granulation / slough / necrosis
+│  2. Tissue Classify  │   ResNet18 classifies 64x64 patches (batched)
+│  (Subham)            │   as granulation / slough / necrosis
 │                      │   Outputs: % of each tissue type, colored heatmap
 └──────────────────────┘
        │
        ▼
 ┌──────────────────────┐
-│  3. Healing Predict  │   Simulates 21-day progression from Day-0 mask,
-│  (Varsha)            │   XGBoost predicts healing probability
+│  3. Healing Estimate │   Simulates 21-day progression from Day-0 mask,
+│  (Varsha)            │   XGBoost predicts healing probability using
+│                      │   area + tissue features
 │                      │   Outputs: probability, label, area/tissue trend plots
 └──────────────────────┘
        │
@@ -60,18 +63,15 @@ dfu_pipeline/
 │
 ├── data/
 │   └── sample_inputs/                 # drop wound images here
-│       ├── test_wound.jpg
-│       ├── woundtst.jpg
-│       └── woundtst2.jpg
 │
 ├── models/                            # trained weights go here (not in git)
 │   ├── segmentation/
 │   │   ├── best.pt                    # YOLO
-│   │   └── medsam_vit_b.pth           # MedSAM
+│   │   └── medsam_vit_b.pth          # MedSAM
 │   ├── tissue/
-│   │   └── tissue_model.pth           # ResNet18
+│   │   └── tissue_model.pth          # ResNet18
 │   └── healing/
-│       └── xgb_healing.json           # XGBoost
+│       └── xgb_healing.json          # XGBoost
 │
 ├── outputs/                           # generated at runtime (gitignored)
 │   ├── masks_pred/                    # binary wound masks
@@ -82,14 +82,14 @@ dfu_pipeline/
 │
 ├── pipeline/
 │   ├── __init__.py
-│   ├── config.py                      # all paths and thresholds
+│   ├── config.py                      # all paths, thresholds, and settings
 │   ├── schemas.py                     # output dataclasses
 │   ├── orchestrator.py                # the top-level DFUPipeline class
 │   │
 │   ├── segmentation/                  # Prince's module
 │   │   ├── __init__.py
 │   │   ├── model.py                   # loads YOLO + MedSAM
-│   │   ├── preprocess.py              # image loading / resizing
+│   │   ├── preprocess.py              # image loading, validation, resizing
 │   │   ├── infer.py                   # detection + segmentation
 │   │   └── utils.py                   # mask cleanup, overlays, area
 │   │
@@ -97,7 +97,7 @@ dfu_pipeline/
 │   │   ├── __init__.py
 │   │   ├── model.py                   # loads ResNet18
 │   │   ├── preprocess.py              # patch sampling + transforms
-│   │   ├── infer.py                   # sliding-window classification
+│   │   ├── infer.py                   # batched sliding-window classification
 │   │   └── utils.py                   # tissue map overlay, percentages
 │   │
 │   └── healing/                       # Varsha's module
@@ -130,8 +130,8 @@ dfu_pipeline/
 ### 1. Clone the repo
 
 ```bash
-git clone https://github.com/<your-username>/dfu-pipeline.git
-cd dfu-pipeline
+git clone https://github.com/princemiller05/Wound-Monitoring.git
+cd Wound-Monitoring
 ```
 
 ### 2. Install dependencies
@@ -157,7 +157,7 @@ If you don't have `xgb_healing.json`, regenerate it:
 python scripts/train_healing_model.py
 ```
 
-That trains XGBoost on synthetic data and saves the model. Takes a few seconds.
+That trains XGBoost on synthetic data with 5-fold cross-validation and saves the model. Takes a few seconds.
 
 ---
 
@@ -177,6 +177,14 @@ python run_demo.py
 python run_demo.py --image data/sample_inputs/woundtst.jpg --case CASE_001
 ```
 
+### CPU-only mode
+
+If you don't have a GPU or CUDA is running out of memory:
+
+```bash
+python run_demo.py --image data/sample_inputs/woundtst.jpg --device cpu
+```
+
 ### From Python
 
 ```python
@@ -190,17 +198,9 @@ result = pipe.run("data/sample_inputs/woundtst.jpg", case_id="CASE_001")
 
 # Access structured results
 print(result.segmentation.area_px)          # e.g. 39246
-print(result.tissue.granulation_pct)        # e.g. 100.0
-print(result.healing.healing_probability)   # e.g. 0.9856
+print(result.tissue.granulation_pct)        # e.g. 85.0
+print(result.healing.healing_probability)   # e.g. 0.82
 print(result.healing.predicted_label)       # "healing" or "non_healing"
-```
-
-### CPU-only mode
-
-If you don't have a GPU or CUDA is giving you grief:
-
-```python
-pipe = DFUPipeline(device="cpu")
 ```
 
 ### Batch processing many images
@@ -233,9 +233,9 @@ We use a consistent naming scheme across all modules so results can be joined la
 
 Each module returns a typed dataclass (see `pipeline/schemas.py`):
 
-- `SegmentationResult` — `mask_path`, `overlay_path`, `crop_path`, `area_px`, `bbox`, `yolo_conf`
-- `TissueResult` — `granulation_pct`, `slough_pct`, `necrosis_pct`, `tissue_map_path`
-- `HealingResult` — `healing_probability`, `predicted_label`, `rule_label`, `key_factors`
+- `SegmentationResult` — `mask_path`, `overlay_path`, `crop_path`, `area_px`, `bbox`, `yolo_conf`, `detection_failed`
+- `TissueResult` — `granulation_pct`, `slough_pct`, `necrosis_pct`, `tissue_map_path`, `classifier_warning`
+- `HealingResult` — `healing_probability`, `predicted_label`, `rule_label`, `simulation_mode`, `key_factors`
 - `PipelineResult` — all three combined
 
 ---
@@ -250,12 +250,43 @@ pytest tests/
 Tests cover the pure-Python logic (feature extraction, rule baseline, mask postprocessing). The model-heavy pieces are tested end-to-end by running `run_demo.py` on a sample image.
 
 ---
+
+## Known Limitations
+
+This is a research prototype with important constraints that should be understood:
+
+1. **Healing prediction is simulation-based.** The pipeline only takes a single Day-0 image. It generates a synthetic 21-day progression using morphological operations (erosion/dilation) and predicts based on that. This is not a real longitudinal assessment.
+
+2. **Tissue classifier may show bias.** The ResNet18 model was trained on a limited dataset and may over-predict granulation tissue. If the pipeline warns about "classifier collapse," the tissue percentages should not be trusted.
+
+3. **XGBoost is trained on synthetic data.** The healing model learns from artificially generated wound trajectories. While the label assignment uses clinically-grounded thresholds (30% area reduction), the training data does not capture real wound biology.
+
+4. **No calibrated probabilities.** The `healing_probability` score from XGBoost is not calibrated — a score of 0.85 does not mean "85% likely to heal." Platt scaling or isotonic regression would be needed for calibrated outputs.
+
+5. **Single-image limitation.** The pipeline is designed around having one photo per patient. Real clinical assessment requires multiple visits over weeks.
+
 ---
 
 ## Roadmap
 
 - [x] Unify three notebooks into one pipeline
 - [x] End-to-end local inference
-- [ ] Real multi-visit longitudinal data support (currently uses synthetic)
-- [ ] Deploy as a cloud service (REST API)
+- [x] Batched tissue patch classification
+- [x] Input validation and format checking
+- [x] Python logging (replaces print statements)
+- [ ] Real multi-visit longitudinal data support
+- [ ] Retrain tissue classifier with balanced dataset
+- [ ] Calibrate XGBoost probabilities (Platt scaling)
+- [ ] Deploy as a cloud service (REST API with FastAPI)
 - [ ] Mobile app for patient-side photo capture
+
+---
+
+## Credits
+
+| Module           | Author   |
+|------------------|----------|
+| Segmentation     | Prince   |
+| Tissue Classify  | Subham   |
+| Healing Predict  | Varsha   |
+| Pipeline + Infra | Prince   |

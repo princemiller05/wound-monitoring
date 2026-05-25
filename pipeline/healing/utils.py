@@ -3,10 +3,13 @@ Plot helpers for healing prediction output.
 Uses the 'Agg' backend so it works in headless environments (servers, Colab, etc).
 """
 
+import logging
 import numpy as np
 import matplotlib
 matplotlib.use("Agg")   # must be set BEFORE importing pyplot
 import matplotlib.pyplot as plt
+
+logger = logging.getLogger(__name__)
 
 
 def plot_mask_progression(masks_dict: dict, save_path: str, case_id: str = ""):
@@ -14,7 +17,6 @@ def plot_mask_progression(masks_dict: dict, save_path: str, case_id: str = ""):
     days = sorted(masks_dict.keys())
     fig, axes = plt.subplots(1, len(days), figsize=(3 * len(days), 3))
 
-    # If only one day, axes is a single Axes, not a list — wrap it
     if len(days) == 1:
         axes = [axes]
 
@@ -23,11 +25,11 @@ def plot_mask_progression(masks_dict: dict, save_path: str, case_id: str = ""):
         ax.set_title(f"Day {day}")
         ax.axis("off")
 
-    if case_id:
-        fig.suptitle(f"{case_id} - Mask Progression")
+    title = f"{case_id} - Mask Progression (Simulated)" if case_id else "Mask Progression (Simulated)"
+    fig.suptitle(title)
     plt.tight_layout()
     plt.savefig(save_path, bbox_inches="tight", dpi=100)
-    plt.close(fig)   # close so memory doesn't pile up over many runs
+    plt.close(fig)
 
 
 def plot_area_trend(longitudinal_df, save_path: str, case_id: str = ""):
@@ -36,7 +38,8 @@ def plot_area_trend(longitudinal_df, save_path: str, case_id: str = ""):
     ax.plot(longitudinal_df["day"], longitudinal_df["area_pixels"], marker="o")
     ax.set_xlabel("Day")
     ax.set_ylabel("Area (pixels)")
-    ax.set_title(f"Wound Area Progression{f' - {case_id}' if case_id else ''}")
+    title = f"Wound Area Progression (Simulated){f' - {case_id}' if case_id else ''}"
+    ax.set_title(title)
     plt.tight_layout()
     plt.savefig(save_path, bbox_inches="tight", dpi=100)
     plt.close(fig)
@@ -53,7 +56,8 @@ def plot_tissue_trend(longitudinal_df, save_path: str, case_id: str = ""):
             marker="o", label="Necrosis")
     ax.set_xlabel("Day")
     ax.set_ylabel("Percent")
-    ax.set_title(f"Tissue Composition{f' - {case_id}' if case_id else ''}")
+    title = f"Tissue Composition (Simulated){f' - {case_id}' if case_id else ''}"
+    ax.set_title(title)
     ax.legend()
     plt.tight_layout()
     plt.savefig(save_path, bbox_inches="tight", dpi=100)
