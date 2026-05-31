@@ -82,12 +82,17 @@ def generate_tissue_progression(mode="healing", seed=42,
         n0 = day0_tissue.get("necrosis_pct", 30)
 
         if mode == "healing":
-            # Healing: granulation increases, necrosis/slough decrease
+            # Healing: granulation increases toward 100, necrosis/slough decrease toward 0.
+            # Use headroom-based increments so values never saturate at exactly 100
+            # (re-review section 8.1)
+            g_headroom = 100 - g0
+            s_floor = s0  # slough can drop toward 0
+            n_floor = n0  # necrosis can drop toward 0
             progression = {
                 0:  {"granulation_pct": g0, "slough_pct": s0, "necrosis_pct": n0},
-                7:  {"granulation_pct": g0 + 15, "slough_pct": s0 - 5, "necrosis_pct": n0 - 10},
-                14: {"granulation_pct": g0 + 30, "slough_pct": s0 - 12, "necrosis_pct": n0 - 18},
-                21: {"granulation_pct": g0 + 45, "slough_pct": s0 - 20, "necrosis_pct": n0 - 25},
+                7:  {"granulation_pct": g0 + 0.25 * g_headroom, "slough_pct": s0 - 0.25 * s_floor, "necrosis_pct": n0 - 0.30 * n_floor},
+                14: {"granulation_pct": g0 + 0.50 * g_headroom, "slough_pct": s0 - 0.45 * s_floor, "necrosis_pct": n0 - 0.55 * n_floor},
+                21: {"granulation_pct": g0 + 0.75 * g_headroom, "slough_pct": s0 - 0.65 * s_floor, "necrosis_pct": n0 - 0.75 * n_floor},
             }
         else:
             # Non-healing: tissue composition stagnates

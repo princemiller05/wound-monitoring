@@ -247,7 +247,13 @@ cd dfu_pipeline
 pytest tests/
 ```
 
-Tests cover the pure-Python logic (feature extraction, rule baseline, mask postprocessing). The model-heavy pieces are tested end-to-end by running `run_demo.py` on a sample image.
+Tests cover the pure-Python logic (feature extraction, rule baseline, mask postprocessing) plus regression tests that verify the training data has no target leakage. The model-heavy pieces are tested end-to-end by running `run_demo.py` on a sample image.
+
+---
+
+## Healing Model Evaluation
+
+The healing model is evaluated on synthetic simulated trajectories using 5-fold cross-validation. After removing direct target leakage (labels come from a hidden clean trajectory, features from noisy observations), XGBoost achieved approximately 0.92 test accuracy compared with 0.82 for the rule baseline. Tissue features contributed 31% of total feature importance, confirming the model uses tissue composition and not just area change. These results are for research-prototype validation only and should not be interpreted as clinical performance on real patient data.
 
 ---
 

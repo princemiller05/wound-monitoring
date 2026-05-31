@@ -1,5 +1,7 @@
 """
 Tests for the healing prediction module.
+
+Includes regression tests for target leakage prevention (re-review section 5).
 """
 
 import numpy as np
@@ -17,7 +19,6 @@ def test_healing_sequence_shrinks():
     seq = generate_healing_sequence(mask)
     areas = [seq[day].sum() for day in sorted(seq.keys())]
 
-    # Each subsequent mask should be smaller or equal
     for i in range(1, len(areas)):
         assert areas[i] <= areas[i - 1], \
             f"Day {sorted(seq.keys())[i]}: area should decrease"
@@ -63,10 +64,10 @@ def test_build_features_table_tissue_features():
     features = build_features_table(df)
     row = features.iloc[0]
 
-    assert row["mean_granulation"] == 50.0   # mean of [20, 40, 60, 80]
-    assert row["mean_necrosis"] == 25.0      # mean of [40, 30, 20, 10]
-    assert row["granulation_trend"] == 60.0  # 80 - 20
-    assert row["necrosis_trend"] == -30.0    # 10 - 40
+    assert row["mean_granulation"] == 50.0
+    assert row["mean_necrosis"] == 25.0
+    assert row["granulation_trend"] == 60.0
+    assert row["necrosis_trend"] == -30.0
 
 
 def test_rule_baseline():
@@ -105,9 +106,54 @@ def test_tissue_progression_uses_real_baseline():
         mode="healing", seed=42, day0_tissue=real_tissue
     )
 
-    # Day 0 should start near the real values (with noise)
     day0 = progression[0]
-    assert abs(day0["granulation_pct"] - 85) < 10  # within noise margin
+    assert abs(day0["granulation_pct"] - 85) < 10
+
+
+# ─── Regression tests for target leakage (re-review section 5) ──────────
+
+def test_label_not_identical_to_pct_area_threshold():
+    """
+    The label must NOT be a deterministic function of pct_area_change.
+    If it were, the model could solve the task with one threshold rule
+    and accuracy would be perfect (leakage).
+    """
+    from scripts.train_healing_model import generate_synthetic_training_data
+    from pipeline.config import RULE_REDUCTION_THR
+
+    df = generate_synthetic_training_data(n_cases=400, seed=42)
+    rule_labels = (df["pct_area_change"] >= RULE_REDUCTION_THR).astype(int)
+    assert (df["label"] != rule_labels).sum() > 0, \
+        "LEAKAGE: label is identical to the 30% pct_area_change rule"
+
+
+def test_classes_overlap_near_boundary():
+    """
+    Both classes should exist near the 30% decision boundary.
+    If they don't overlap, the task is trivially separable.
+    """
+    from scripts.train_healing_model import generate_synthetic_training_data
+
+    df = generate_synthetic_training_data(n_cases=400, seed=42)
+    boundary = df[df["pct_area_change"].between(0.15, 0.35)]
+    assert boundary["label"].nunique() == 2, \
+        "LEAKAGE: only one class exists near the decision boundary"
+
+
+def test_rule_baseline_not_perfect():
+    """
+    The simple rule (pct_area_change >= 0.30 → healing) should NOT
+    achieve perfect accuracy. If it does, the label is just a copy of
+    the rule and XGBoost learns nothing beyond the rule.
+    """
+    from scripts.train_healing_model import generate_synthetic_training_data
+    from pipeline.config import RULE_REDUCTION_THR
+
+    df = generate_synthetic_training_data(n_cases=400, seed=42)
+    rule_labels = (df["pct_area_change"] >= RULE_REDUCTION_THR).astype(int)
+    rule_accuracy = (rule_labels == df["label"]).mean()
+    assert rule_accuracy < 1.0, \
+        f"LEAKAGE: rule baseline has perfect accuracy ({rule_accuracy})"
 
 
 if __name__ == "__main__":

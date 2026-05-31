@@ -88,10 +88,12 @@ def build_features_table(longitudinal_df: pd.DataFrame) -> pd.DataFrame:
         # pct_area_change: positive means wound shrank, negative means it grew
         change = (initial - final) / initial if initial > 0 else 0.0
 
-        # Linear regression slope over area trajectory — more robust than std
-        # with only 4 data points (reviewer feedback 5.2, N4)
+        # Linear regression slope, normalized by initial area so it's
+        # comparable across wound sizes (re-review section 8.2).
+        # A slope of -0.05 means the wound shrinks by 5% of initial area per step.
         if len(areas) >= 2:
-            slope = float(np.polyfit(range(len(areas)), areas, 1)[0])
+            raw_slope = float(np.polyfit(range(len(areas)), areas, 1)[0])
+            slope = raw_slope / initial if initial > 0 else 0.0
         else:
             slope = 0.0
 
@@ -105,7 +107,7 @@ def build_features_table(longitudinal_df: pd.DataFrame) -> pd.DataFrame:
             "final_area": final,
             "pct_area_change": round(change, 6),
             "mean_area": round(float(np.mean(areas)), 2),
-            "area_trend_slope": round(slope, 2),
+            "area_trend_slope": round(slope, 6),
             "mean_granulation": round(float(np.mean(gran_vals)), 2),
             "mean_necrosis": round(float(np.mean(necro_vals)), 2),
             "granulation_trend": round(float(gran_vals[-1] - gran_vals[0]), 2),
