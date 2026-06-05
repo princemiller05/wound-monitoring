@@ -1,136 +1,166 @@
-# AI-Assisted Remote Wound Monitoring System for Telehealth Applications
+# Wound Monitoring
 
-> **Disclaimer:** This is a research prototype developed as a university group project. It is **not** intended for clinical decision-making. The healing prediction is based on simulated wound progression from a single photograph — not real multi-visit patient data. Do not use this system to make medical decisions.
+**AI-Assisted Remote Wound Monitoring System for Telehealth Applications**
 
-An end-to-end pipeline for analyzing **Diabetic Foot Ulcers (DFUs)** from a single photograph. It segments the wound, classifies the tissue composition, and estimates a healing trajectory.
+> **Disclaimer — research prototype, not for clinical use.** This is a university group project. It is **not** intended for clinical decision-making. The healing prediction comes from a small model trained on synthetic wound progression and is **not calibrated**. Do not use this system to make medical decisions.
 
-Built as part of a group project for remote telehealth applications. Three modules — **wound segmentation**, **tissue classification**, and **healing prediction** — chained into one clean pipeline you can run with a single command.
+Wound Monitoring is an end-to-end system for tracking **Diabetic Foot Ulcers (DFUs)** from photographs over time. It segments the wound, classifies the tissue, and estimates whether the wound is **healing or worsening** across visits. Patients capture photos in the **WoundWatch** mobile app; a cloud pipeline analyses each upload automatically; and a doctor reviews each patient's progress on a web dashboard.
+
+> **Project vs app name:** the **project** is *Wound Monitoring*; the patient **mobile app** is *WoundWatch*. "WoundWatch" only ever refers to the app.
 
 ---
 
-## What It Does
+## Two parts of this project
 
-Give it a wound photo. Get back:
+| Part | What it is | Where it lives |
+|------|------------|----------------|
+| **The ML pipeline** | The original local pipeline: segmentation → tissue → healing. Runs with one command. | `pipeline/` |
+| **The cloud system** | The pipeline deployed on Azure ML as an event-driven, multi-patient service, plus the app wiring and a doctor dashboard. | `azure/`, `dashboard/` |
+
+The pipeline code is unchanged by the cloud move — everything new is additive.
+
+---
+
+## What it does
+
+Give it a series of wound photos taken on different days. Get back:
 
 1. **A segmentation mask** — exactly where the wound is (pixel level)
-2. **A tissue breakdown** — how much is granulation (healthy), slough, or necrosis
-3. **A healing estimate** — probability score based on simulated 21-day progression
+2. **A tissue breakdown** — granulation (healthy) / slough / necrosis percentages
+3. **A healing estimate** — a probability and a plain `improving / worsening / stable` trend across the visits
 
-All the intermediate images (masks, overlays, tissue maps, trend plots) get saved to disk so you can see exactly what the pipeline is doing at each step.
-
----
-
-## Pipeline Overview
-
-```
-   Wound Photo
-       │
-       ▼
-┌──────────────────────┐
-│  1. Segmentation     │   YOLO finds the wound → MedSAM outlines it precisely
-│  (Prince)            │   Outputs: mask, overlay, wound area (px)
-└──────────────────────┘
-       │
-       ▼
-┌──────────────────────┐
-│  2. Tissue Classify  │   ResNet18 classifies 64x64 patches (batched)
-│  (Subham)            │   as granulation / slough / necrosis
-│                      │   Outputs: % of each tissue type, colored heatmap
-└──────────────────────┘
-       │
-       ▼
-┌──────────────────────┐
-│  3. Healing Estimate │   Simulates 21-day progression from Day-0 mask,
-│  (Varsha)            │   XGBoost predicts healing probability using
-│                      │   area + tissue features
-│                      │   Outputs: probability, label, area/tissue trend plots
-└──────────────────────┘
-       │
-       ▼
-  PipelineResult
-```
+All intermediate images (masks, overlays, tissue maps, trend plots) are saved so you can see what each step is doing.
 
 ---
 
-## Repo Structure
+## How the cloud system works
+
+The system is **event-driven** and handles **many patients at once**. An upload triggers analysis; analysis writes to the database; the app and dashboard simply read what is stored.
 
 ```
-dfu_pipeline/
+WRITE PATH  (runs automatically on every single upload)
+
+  Patient takes a photo in the WoundWatch app
+        |  upload -> wound-photos/CASE_001/CASE_001_DAY7.jpg
+        v
+  [Azure Blob Storage] --- new blob event ---> [on-image-uploaded Function]
+        |                                          (Prince)
+        |  1. analyse THIS photo (segmentation + tissue)
+        v
+  [Azure ML endpoint -> score.py]  --> area_px + tissue %  (stored on the photo doc)
+        |
+        |  2. aggregate all of the patient's stored numbers (XGBoost only)
+        v
+  [Azure ML endpoint -> score.py]  --> healing probability + label + trend
+        |
+        v
+  [Firestore]  patients/CASE_001.latest_prediction  (the longitudinal summary)
+
+
+READ PATH  (instant; nothing is recomputed)
+
+  [WoundWatch app]  Progress screen  ─┐
+                                       ├─> get-patient-history?patient_id=CASE_001
+  [Doctor dashboard] pick a patient  ─┘            (Prince)
+                                                       |
+                                                       v
+                              charts + improving/worsening badge
+```
+
+**Ad-hoc uploads:** the doctor dashboard can also upload photos directly through a `predict-direct` Function (Shubam), which runs the full pipeline on the spot without touching the database.
+
+**Many patients at once:** each patient has their own Blob folder and Firestore documents, so data never mixes. The Azure ML endpoint **autoscales** (min 2 / max 6 instances) and uploads are independent events, so ~10 apps uploading together queue and drain rather than fail.
+
+---
+
+## Architecture at a glance
+
+| Layer | Component | Owner |
+|-------|-----------|-------|
+| Clients | WoundWatch app (patients) + desktop doctor dashboard (view + ad-hoc upload) | Prince + Varsha |
+| Image storage | Azure Blob Storage container `wound-photos` (private, one folder per patient) | Prince |
+| Database | Firestore — per-photo results + per-patient longitudinal summary | Prince |
+| Event trigger | `on-image-uploaded` Function — runs the model on every upload, writes results | Prince |
+| Read / ad-hoc APIs | `get-patient-history` (stored results) + `predict-direct` (ad-hoc) | Prince + Shubam |
+| Brain | Azure ML managed online endpoint running `score.py`, autoscaled | Shubam |
+| Models | 4 registered models: YOLO, MedSAM, ResNet18, XGBoost | Prince + Shubam + Varsha |
+
+> **Azure resource names** keep the `woundwatch-*` prefix from the original app guide (resource group `woundwatch-rg`, storage `woundwatchstorage`, function app `woundwatch-api`, ML workspace `woundwatch-ml`) so the already-built app keeps working. The project name is *Wound Monitoring*; the resource prefix is just a legacy identifier.
+
+---
+
+## Repo structure
+
+```
+Wound-Monitoring/
 ├── README.md
 ├── requirements.txt
-├── .gitignore
-├── run_demo.py                        # one-command demo
+├── run_demo.py                         # one-command local demo
 │
-├── data/
-│   └── sample_inputs/                 # drop wound images here
+├── pipeline/                           # the ML pipeline (unchanged by the cloud move)
+│   ├── config.py                       # paths, thresholds, FEATURE_COLS
+│   ├── schemas.py                      # output dataclasses
+│   ├── orchestrator.py                 # DFUPipeline class
+│   ├── segmentation/                   # YOLO + MedSAM        (Prince)
+│   ├── tissue/                         # ResNet18             (Shubam)
+│   └── healing/                        # XGBoost + features   (Varsha)
 │
-├── models/                            # trained weights go here (not in git)
-│   ├── segmentation/
-│   │   ├── best.pt                    # YOLO
-│   │   └── medsam_vit_b.pth          # MedSAM
-│   ├── tissue/
-│   │   └── tissue_model.pth          # ResNet18
-│   └── healing/
-│       └── xgb_healing.json          # XGBoost
+├── models/                             # weights — NOT in git (see Setup)
+│   ├── segmentation/{best.pt, medsam_vit_b.pth}
+│   ├── tissue/tissue_model.pth
+│   └── healing/xgb_healing.json
 │
-├── outputs/                           # generated at runtime (gitignored)
-│   ├── masks_pred/                    # binary wound masks
-│   ├── overlays/                      # contour drawn on original
-│   ├── crops/                         # isolated wound, background removed
-│   ├── tissue_preds/                  # colored tissue heatmaps
-│   └── healing/                       # trend plots + CSVs
+├── scripts/train_healing_model.py      # regenerate xgb_healing.json
+├── tests/                              # pytest suite
 │
-├── pipeline/
-│   ├── __init__.py
-│   ├── config.py                      # all paths, thresholds, and settings
-│   ├── schemas.py                     # output dataclasses
-│   ├── orchestrator.py                # the top-level DFUPipeline class
-│   │
-│   ├── segmentation/                  # Prince's module
-│   │   ├── __init__.py
-│   │   ├── model.py                   # loads YOLO + MedSAM
-│   │   ├── preprocess.py              # image loading, validation, resizing
-│   │   ├── infer.py                   # detection + segmentation
-│   │   └── utils.py                   # mask cleanup, overlays, area
-│   │
-│   ├── tissue/                        # Subham's module
-│   │   ├── __init__.py
-│   │   ├── model.py                   # loads ResNet18
-│   │   ├── preprocess.py              # patch sampling + transforms
-│   │   ├── infer.py                   # batched sliding-window classification
-│   │   └── utils.py                   # tissue map overlay, percentages
-│   │
-│   └── healing/                       # Varsha's module
-│       ├── __init__.py
-│       ├── model.py                   # loads XGBoost
-│       ├── synthetic_progression.py   # simulates day 7/14/21 masks
-│       ├── features.py                # longitudinal dataset + summary features
-│       ├── rule_baseline.py           # 30% area reduction rule
-│       ├── infer.py                   # main prediction function
-│       └── utils.py                   # trend plots
+├── azure/                              # NEW — cloud deployment (additive)
+│   ├── score.py                        # scoring script: single / longitudinal / aggregate   (Shubam)
+│   ├── environment.yml                 # conda env (torch + MedSAM + opencv-headless)         (Shubam)
+│   ├── endpoint.yml, deployment.yml    # managed online endpoint definitions                  (Shubam)
+│   └── functions/
+│       ├── host.json
+│       ├── requirements.txt            # azure-functions, requests, firebase-admin, azure-storage-blob
+│       ├── on_image_uploaded/          # Blob-trigger inference + DB writes                   (Prince)
+│       ├── get_patient_history/        # read stored results for app + dashboard              (Prince)
+│       └── predict_direct/             # ad-hoc dashboard uploads                             (Shubam)
 │
-├── notebooks/                         # original notebooks, converted to .py for reference
-│   ├── prince_segmentation.py
-│   ├── subham_tissue.py
-│   └── varsha_healing.py
-│
-├── scripts/
-│   └── train_healing_model.py         # regenerate xgb_healing.json
-│
-└── tests/
-    ├── test_segmentation.py
-    ├── test_tissue.py
-    └── test_healing.py
+└── dashboard/                          # NEW — Streamlit doctor dashboard                     (Varsha)
+    ├── app.py
+    └── requirements.txt
 ```
 
 ---
 
-## Setup
+## The team & branch workflow
 
-### 1. Clone the repo
+One shared repo, one branch per person, Shubam reviews and merges.
+
+| Branch | Owner | Responsibility |
+|--------|-------|----------------|
+| `shubam-integration` | **Shubam** | Tissue model, `score.py`, the Azure ML endpoint + scaling, `predict-direct`, end-to-end & load testing. Reviews and merges PRs. |
+| `prince-segmentation` | **Prince** | Segmentation models, the app, Blob Storage, the Firestore database, the `on-image-uploaded` trigger, and `get-patient-history`. |
+| `varsha-healing` | **Varsha** | The healing model and the doctor dashboard. |
 
 ```bash
-git clone https://github.com/princemiller05/Wound-Monitoring.git
+git checkout -b your-branch        # work on your own branch
+git add . && git commit -m "..."   # commit your work
+git push -u origin your-branch     # push, then open a PR for Shubam to merge
+```
+
+Detailed step-by-step deployment guides (one per person) live alongside this repo:
+
+- `01_Shubam_Integration_Lead_Azure_ML.docx`
+- `02_Prince_Segmentation_and_App_Azure_ML.docx`
+- `03_Varsha_Healing_Prediction_Azure_ML.docx`
+
+---
+
+## Local setup
+
+### 1. Clone
+
+```bash
+git clone https://github.com/NaskenAI/Wound-Monitoring.git
 cd Wound-Monitoring
 ```
 
@@ -140,159 +170,125 @@ cd Wound-Monitoring
 pip install -r requirements.txt
 ```
 
-### 3. Drop in the model weights
+### 3. Add the model weights
 
-The weights aren't committed to the repo (they're too big for git). Place them here:
+Weights are too big for git, so they are **not** committed. Place them here:
 
-| File                  | Goes in                     |
-|-----------------------|-----------------------------|
-| `best.pt`             | `models/segmentation/`      |
-| `medsam_vit_b.pth`    | `models/segmentation/`      |
-| `tissue_model.pth`    | `models/tissue/`            |
-| `xgb_healing.json`    | `models/healing/`           |
+| File | Goes in |
+|------|---------|
+| `best.pt` | `models/segmentation/` |
+| `medsam_vit_b.pth` | `models/segmentation/` |
+| `tissue_model.pth` | `models/tissue/` |
+| `xgb_healing.json` | `models/healing/` |
 
-If you don't have `xgb_healing.json`, regenerate it:
+If you don't have `xgb_healing.json`, regenerate it (takes a few seconds):
 
 ```bash
 python scripts/train_healing_model.py
 ```
 
-That trains XGBoost on synthetic data with 5-fold cross-validation and saves the model. Takes a few seconds.
-
 ---
 
-## Running It
-
-### Quickest way
-
-Put a wound image in `data/sample_inputs/`, then:
+## Running it locally
 
 ```bash
+# quickest: drop an image in data/sample_inputs/ then
 python run_demo.py
-```
 
-### On a specific image
-
-```bash
+# on a specific image
 python run_demo.py --image data/sample_inputs/woundtst.jpg --case CASE_001
-```
 
-### CPU-only mode
-
-If you don't have a GPU or CUDA is running out of memory:
-
-```bash
+# CPU-only (no GPU / CUDA OOM)
 python run_demo.py --image data/sample_inputs/woundtst.jpg --device cpu
 ```
 
-### From Python
+From Python:
 
 ```python
 from pipeline.orchestrator import DFUPipeline
 
-# Load all models once — this takes a few seconds
-pipe = DFUPipeline()
-
-# Then run on as many images as you want — each run is fast
+pipe = DFUPipeline()                                   # loads all models once
 result = pipe.run("data/sample_inputs/woundtst.jpg", case_id="CASE_001")
 
-# Access structured results
 print(result.segmentation.area_px)          # e.g. 39246
 print(result.tissue.granulation_pct)        # e.g. 85.0
 print(result.healing.healing_probability)   # e.g. 0.82
 print(result.healing.predicted_label)       # "healing" or "non_healing"
 ```
 
-### Batch processing many images
+---
 
-```python
-from pathlib import Path
+## Deploying to Azure (overview)
 
-pipe = DFUPipeline()
+The full instructions are in the three deployment guides above. In short:
 
-for i, img_path in enumerate(Path("data/sample_inputs").glob("*.jpg")):
-    pipe.run(str(img_path), case_id=f"CASE_{i:03d}")
+1. **Register four models** in Azure ML (`dfu-yolo`, `dfu-medsam`, `dfu-tissue`, `dfu-healing`).
+2. **Build the environment** (`dfu-inference`) and deploy `score.py` to a **managed online endpoint** with autoscaling — Shubam.
+3. **Set up the database fields** in Firestore and deploy the **`on-image-uploaded`** Blob trigger so the model runs on every upload — Prince.
+4. **Deploy `get-patient-history`** and point the app's Progress screen at it; deploy **`predict-direct`** for the dashboard — Prince + Shubam.
+5. **Build the doctor dashboard** and connect it to `get-patient-history` and `predict-direct` — Varsha.
+6. **Test** the write path, the read path, and the **10-patient load test**.
+
+---
+
+## Naming convention
+
+| Field | Format | Example |
+|-------|--------|---------|
+| `case_id` (patient) | `CASE_NNN` | `CASE_001` |
+| `image_id` | `CASE_NNN_DAYN` | `CASE_001_DAY7` |
+| Blob path | `{patient_id}/{patient_id}_DAY{n}.jpg` | `CASE_001/CASE_001_DAY7.jpg` |
+| `visit_day` | integer | `0, 7, 14, 21` |
+
+> The whole pipeline keys off the **filename** to know which photo is which day, so the app's upload path must follow the Blob path format exactly.
+
+---
+
+## Output schema
+
+Each module returns a typed dataclass (`pipeline/schemas.py`). The stored cloud result the app and dashboard read looks like:
+
+```json
+{
+  "healing_probability": 0.82,
+  "predicted_label": "healing",
+  "trend": "improving",
+  "top_factors": ["Wound area reducing across visits", "..."],
+  "day_series": [0, 7, 14],
+  "area_series": [39246, 35110, 31044],
+  "tissue_series": { "granulation": [...], "slough": [...], "necrosis": [...] },
+  "is_mock": false
+}
 ```
-
----
-
-## Naming Convention
-
-We use a consistent naming scheme across all modules so results can be joined later:
-
-| Field       | Format           | Example          |
-|-------------|------------------|------------------|
-| `case_id`   | `CASE_NNN`       | `CASE_001`       |
-| `image_id`  | `CASE_NNN_DAYN`  | `CASE_001_DAY0`  |
-| `wound_id`  | `WN`             | `W1`             |
-| `visit_day` | integer          | `0, 7, 14, 21`   |
-
----
-
-## Output Schemas
-
-Each module returns a typed dataclass (see `pipeline/schemas.py`):
-
-- `SegmentationResult` — `mask_path`, `overlay_path`, `crop_path`, `area_px`, `bbox`, `yolo_conf`, `detection_failed`
-- `TissueResult` — `granulation_pct`, `slough_pct`, `necrosis_pct`, `tissue_map_path`, `classifier_warning`
-- `HealingResult` — `healing_probability`, `predicted_label`, `rule_label`, `simulation_mode`, `key_factors`
-- `PipelineResult` — all three combined
 
 ---
 
 ## Tests
 
 ```bash
-cd dfu_pipeline
 pytest tests/
 ```
 
-Tests cover the pure-Python logic (feature extraction, rule baseline, mask postprocessing) plus regression tests that verify the training data has no target leakage. The model-heavy pieces are tested end-to-end by running `run_demo.py` on a sample image.
+Tests cover the pure-Python logic (feature extraction, rule baseline, mask postprocessing) plus regression tests guarding against target leakage in the training data. Model-heavy pieces are tested end-to-end via `run_demo.py`.
 
 ---
 
-## Healing Model Evaluation
+## Known limitations
 
-The healing model is evaluated on synthetic simulated trajectories using 5-fold cross-validation. After removing direct target leakage (labels come from a hidden clean trajectory, features from noisy observations), XGBoost achieved approximately 0.92 test accuracy compared with 0.82 for the rule baseline. Tissue features contributed 31% of total feature importance, confirming the model uses tissue composition and not just area change. These results are for research-prototype validation only and should not be interpreted as clinical performance on real patient data.
-
----
-
-## Known Limitations
-
-This is a research prototype with important constraints that should be understood:
-
-1. **Healing prediction is simulation-based.** The pipeline only takes a single Day-0 image. It generates a synthetic 21-day progression using morphological operations (erosion/dilation) and predicts based on that. This is not a real longitudinal assessment.
-
-2. **Tissue classifier may show bias.** The ResNet18 model was trained on a limited dataset and may over-predict granulation tissue. If the pipeline warns about "classifier collapse," the tissue percentages should not be trusted.
-
-3. **XGBoost is trained on synthetic data.** The healing model learns from artificially generated wound trajectories. While the label assignment uses clinically-grounded thresholds (30% area reduction), the training data does not capture real wound biology.
-
-4. **No calibrated probabilities.** The `healing_probability` score from XGBoost is not calibrated — a score of 0.85 does not mean "85% likely to heal." Platt scaling or isotonic regression would be needed for calibrated outputs.
-
-5. **Single-image limitation.** The pipeline is designed around having one photo per patient. Real clinical assessment requires multiple visits over weeks.
-
----
-
-## Roadmap
-
-- [x] Unify three notebooks into one pipeline
-- [x] End-to-end local inference
-- [x] Batched tissue patch classification
-- [x] Input validation and format checking
-- [x] Python logging (replaces print statements)
-- [ ] Real multi-visit longitudinal data support
-- [ ] Retrain tissue classifier with balanced dataset
-- [ ] Calibrate XGBoost probabilities (Platt scaling)
-- [ ] Deploy as a cloud service (REST API with FastAPI)
-- [ ] Mobile app for patient-side photo capture
+1. **Healing model trained on synthetic data.** Labels use clinically-grounded thresholds (30% area reduction), but the training data does not capture real wound biology.
+2. **Probabilities are not calibrated.** A score of 0.85 does **not** mean "85% likely to heal." Platt scaling / isotonic regression would be needed.
+3. **Tissue classifier may be biased** toward granulation on limited data. If the pipeline warns about "classifier collapse," do not trust the tissue percentages.
+4. **Longitudinal accuracy depends on real visits.** The cloud system uses real multi-visit photos (an improvement over the original single-image simulation), but a meaningful trend still needs several photos over time.
+5. **Not a medical device.** Research prototype only.
 
 ---
 
 ## Credits
 
-| Module           | Author   |
-|------------------|----------|
-| Segmentation     | Prince   |
-| Tissue Classify  | Subham   |
-| Healing Predict  | Varsha   |
-| Pipeline + Infra | Prince   |
+| Module | Author |
+|--------|--------|
+| Segmentation, app, database & backend | Prince |
+| Tissue classification & integration | Shubam |
+| Healing prediction & doctor dashboard | Varsha |
+
+Final-year ECE group project · VTU.
