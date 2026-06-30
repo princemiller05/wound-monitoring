@@ -1,0 +1,27 @@
+name: wound-monitoring-inference
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip
+  - pip:
+      # Azure: runtime server required by Azure ML Managed Online Endpoints.
+      - azureml-inference-server-http
+
+      # Core: numerical, image, and plotting libraries used during inference.
+      - numpy>=1.24,<2.0
+      - pandas>=2.0,<3.0
+      - opencv-python-headless>=4.8,<5.0
+      - pillow>=10.0,<11.0
+      - matplotlib>=3.7,<4.0
+      - scikit-image>=0.21,<1.0
+
+      # Deep Learning: model execution for YOLO and the tissue classifier.
+      - torch>=2.0,<3.0
+      - torchvision>=0.15,<1.0
+      - ultralytics>=8.0,<9.0
+      # MedSAM will be packaged separately after model integration is finalized.
+
+      # ML: classical ML dependencies used by the healing predictor.
+      - scikit-learn>=1.3,<2.0
+      - xgboost>=2.0,<3.0
