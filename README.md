@@ -67,8 +67,6 @@ READ PATH  (instant; nothing is recomputed)
                               charts + improving/worsening badge
 ```
 
-**Ad-hoc uploads:** the doctor dashboard can also upload photos directly through a `predict-direct` Function (Shubam), which runs the full pipeline on the spot without touching the database.
-
 **Many patients at once:** each patient has their own Blob folder and Firestore documents, so data never mixes. The Azure ML endpoint **autoscales** (min 2 / max 6 instances) and uploads are independent events, so ~10 apps uploading together queue and drain rather than fail.
 
 ---
@@ -77,11 +75,11 @@ READ PATH  (instant; nothing is recomputed)
 
 | Layer | Component | Owner |
 |-------|-----------|-------|
-| Clients | WoundWatch app (patients) + desktop doctor dashboard (view + ad-hoc upload) | Prince + Varsha |
+| Clients | WoundWatch app (patients) + desktop doctor dashboard (doctor views each patient's trend) | Prince + Varsha |
 | Image storage | Azure Blob Storage container `wound-photos` (private, one folder per patient) | Prince |
 | Database | Firestore — per-photo results + per-patient longitudinal summary | Prince |
 | Event trigger | `on-image-uploaded` Function — runs the model on every upload, writes results | Prince |
-| Read / ad-hoc APIs | `get-patient-history` (stored results) + `predict-direct` (ad-hoc) | Prince + Shubam |
+| Read API | `get-patient-history` (serves stored results to the app and dashboard) | Prince |
 | Brain | Azure ML managed online endpoint running `score.py`, autoscaled | Shubam |
 | Models | 4 registered models: YOLO, MedSAM, ResNet18, XGBoost | Prince + Shubam + Varsha |
 
@@ -121,8 +119,7 @@ Wound-Monitoring/
 │       ├── host.json
 │       ├── requirements.txt            # azure-functions, requests, firebase-admin, azure-storage-blob
 │       ├── on_image_uploaded/          # Blob-trigger inference + DB writes                   (Prince)
-│       ├── get_patient_history/        # read stored results for app + dashboard              (Prince)
-│       └── predict_direct/             # ad-hoc dashboard uploads                             (Shubam)
+│       └── get_patient_history/        # read stored results for app + dashboard              (Prince)
 │
 └── dashboard/                          # NEW — Streamlit doctor dashboard                     (Varsha)
     ├── app.py
@@ -137,7 +134,7 @@ One shared repo, one branch per person, Shubam reviews and merges.
 
 | Branch | Owner | Responsibility |
 |--------|-------|----------------|
-| `shubam-integration` | **Shubam** | Tissue model, `score.py`, the Azure ML endpoint + scaling, `predict-direct`, end-to-end & load testing. Reviews and merges PRs. |
+| `shubam-integration` | **Shubam** | Tissue model, `score.py`, the Azure ML endpoint + scaling, end-to-end & load testing. Reviews and merges PRs. |
 | `prince-segmentation` | **Prince** | Segmentation models, the app, Blob Storage, the Firestore database, the `on-image-uploaded` trigger, and `get-patient-history`. |
 | `varsha-healing` | **Varsha** | The healing model and the doctor dashboard. |
 
@@ -225,8 +222,8 @@ The full instructions are in the three deployment guides above. In short:
 1. **Register four models** in Azure ML (`dfu-yolo`, `dfu-medsam`, `dfu-tissue`, `dfu-healing`).
 2. **Build the environment** (`dfu-inference`) and deploy `score.py` to a **managed online endpoint** with autoscaling — Shubam.
 3. **Set up the database fields** in Firestore and deploy the **`on-image-uploaded`** Blob trigger so the model runs on every upload — Prince.
-4. **Deploy `get-patient-history`** and point the app's Progress screen at it; deploy **`predict-direct`** for the dashboard — Prince + Shubam.
-5. **Build the doctor dashboard** and connect it to `get-patient-history` and `predict-direct` — Varsha.
+4. **Deploy `get-patient-history`** and point the app's Progress screen at it — Prince.
+5. **Build the doctor dashboard** and connect it to `get-patient-history` — Varsha.
 6. **Test** the write path, the read path, and the **10-patient load test**.
 
 ---
