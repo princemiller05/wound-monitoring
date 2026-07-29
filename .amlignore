@@ -1,0 +1,32 @@
+# Excluded from the code_configuration snapshot uploaded to Azure ML.
+# NOTE: .amlignore REPLACES .gitignore for asset uploads (azure-ai-ml uses one
+# or the other, never both), so anything that must stay out of the snapshot has
+# to be listed here even if .gitignore already covers it.
+
+# Version control
+.git/
+
+# Virtual environments
+.venv/
+venv/
+
+# Python caches
+__pycache__/
+*.pyc
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Data
+data/
+datasets/
+
+# Generated output
+outputs/
+
+# Model weights — these ship via the registered model bundle
+# (azureml:wound-monitoring-model-bundle:1), never through code_configuration.
+models/
+*.pt
+*.pth
+*.onnx

@@ -33,3 +33,5 @@ Thumbs.db
 .env
 venv/
 .venv/
+azure/sample-request.json
+sample_images/

@@ -22,7 +22,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 # ─── Model Paths ────────────────────────────────────────────────
 # Where the trained model weights live. Drop the files here.
-MODELS_DIR = PROJECT_ROOT / "models"
+MODELS_DIR = Path(os.getenv("AZUREML_MODEL_DIR")) / "models" if os.getenv("AZUREML_MODEL_DIR") else PROJECT_ROOT / "models"
 
 YOLO_WEIGHTS       = MODELS_DIR / "segmentation" / "best.pt"              # YOLO wound detector
 MEDSAM_CHECKPOINT  = MODELS_DIR / "segmentation" / "medsam_vit_b.pth"     # MedSAM segmenter
@@ -34,8 +34,11 @@ DATA_DIR    = PROJECT_ROOT / "data"
 SAMPLE_DIR  = DATA_DIR / "sample_inputs"   # put test images here
 
 # ─── Output Paths ───────────────────────────────────────────────
-# Everything the pipeline generates goes under outputs/
-OUTPUT_DIR       = PROJECT_ROOT / "outputs"
+# Everything the pipeline generates goes under OUTPUT_DIR.
+# Default to /tmp/outputs: on Azure ML Managed Online Endpoints the
+# application directory (/var/azureml-app) is mounted read-only, so writing
+# there makes init() fail. Set DFU_OUTPUT_DIR to write somewhere else.
+OUTPUT_DIR       = Path(os.getenv("DFU_OUTPUT_DIR", "/tmp/outputs"))
 MASKS_DIR        = OUTPUT_DIR / "masks_pred"      # binary wound masks
 OVERLAYS_DIR     = OUTPUT_DIR / "overlays"        # contour-on-image visualizations
 CROPS_DIR        = OUTPUT_DIR / "crops"           # isolated wound crops

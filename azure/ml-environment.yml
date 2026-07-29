@@ -1,0 +1,7 @@
+$schema: https://azuremlschemas.azureedge.net/latest/environment.schema.json
+name: wound-monitoring-inference
+version: 4
+
+build:
+  path: ..
+  dockerfile_path: azure/Dockerfile

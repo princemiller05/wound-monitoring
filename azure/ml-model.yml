@@ -1,0 +1,6 @@
+$schema: https://azuremlschemas.azureedge.net/latest/model.schema.json
+name: wound-monitoring-model-bundle
+version: 1
+type: custom_model
+path: ../models
+description: Model bundle containing the YOLO, MedSAM, Tissue Classification, and Healing Prediction models.
