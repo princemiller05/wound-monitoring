@@ -1,57 +1,64 @@
-# Wound Monitoring – Doctor Dashboard
+# 🩺 Wound Monitoring – Doctor Dashboard
 
-A production-quality Streamlit dashboard for an AI-powered Diabetic Foot
-Ulcer (DFU) monitoring system, styled to feel like a premium healthcare
-SaaS product (Apollo / Microsoft Healthcare / Philips / Epic-grade UI).
+A premium, production-styled Streamlit dashboard for an AI-powered
+Diabetic Foot Ulcer (DFU) monitoring system. Built for clinical
+demo / research-prototype use.
 
-> ⚠️ **Research Prototype — Not for Clinical Use.**
+> ⚠️ **Research Prototype – Not for Clinical Use.**
 
 ## Project Structure
 
 ```
 wound_dashboard/
-├── app.py                     # Entry point: page config, routing, layout
+├── app.py                     # Main entrypoint — wires pages & components
 ├── requirements.txt
+├── .streamlit/
+│   └── config.toml            # Streamlit theme config
 ├── styles/
-│   └── custom.css             # Full custom theme (cards, KPIs, badges, nav)
+│   └── style.css              # Full custom CSS (premium healthcare SaaS look)
 ├── utils/
-│   ├── data_generator.py      # Synthetic patient + visit data (replace with EMR/API)
-│   └── helpers.py             # CSS loader, badge/trend formatting helpers
+│   ├── data_generator.py      # Synthetic patient/clinical data ("backend" layer)
+│   └── helpers.py             # Formatting, CSS loading, badge helpers
 ├── components/
-│   ├── sidebar_nav.py         # Branded sidebar navigation
-│   ├── kpi_cards.py           # Top KPI summary cards
-│   ├── patient_card.py        # Patient profile card
-│   ├── prediction_card.py     # AI healing-prediction gauge card
-│   ├── insight_cards.py       # Top factors / recommendations / warnings / notes
-│   ├── charts.py              # All Plotly chart builders
-│   ├── upload_section.py      # Drag-and-drop image upload + analyse flow
-│   └── footer.py              # Global footer bar
-├── pages_logic/
-│   ├── dashboard.py           # Main dashboard page
-│   ├── patient_history.py     # Searchable patient roster + distributions
-│   ├── upload_images.py       # Image upload & analysis results page
-│   ├── ai_analysis.py         # Deep-dive AI explainability page
-│   ├── reports.py             # PDF / CSV export & print
-│   └── settings.py            # Appearance, notifications, account settings
-└── assets/                    # Place logo/images here if needed
+│   ├── sidebar.py              # Left nav: brand + menu
+│   ├── kpi_cards.py            # Top KPI summary row
+│   ├── patient_search.py       # Search + filters card
+│   ├── patient_card.py         # Patient profile card
+│   ├── prediction_card.py      # AI healing prediction + gauge
+│   ├── ai_insights.py          # Top factors / recommendations / warnings / notes
+│   ├── charts.py               # All Plotly chart builders
+│   ├── upload_section.py       # Drag-and-drop upload + simulated AI analysis
+│   ├── patient_history.py      # Full roster table page
+│   ├── reports_section.py      # PDF/CSV export + print
+│   └── settings_section.py     # Appearance & localization settings
+├── pages/                      # Reserved for future multi-page expansion
+├── assets/                     # Logos / static images
+└── data/                       # Reserved for cached/exported data
 ```
 
-## Running locally
+## Setup
 
 ```bash
+cd wound_dashboard
+python -m venv venv && source venv/bin/activate   # optional
 pip install -r requirements.txt
 streamlit run app.py
 ```
 
-## Notes
+## Design System
 
-- All patient data is **synthetically generated** (`utils/data_generator.py`)
-  for demonstration purposes. Swap this module for real EMR / Azure ML /
-  database calls in production.
-- The UI is fully restyled via `styles/custom.css` — no default Streamlit
-  appearance is used anywhere (sidebar, buttons, inputs, tabs, uploader,
-  cards are all custom-themed with a medical-blue palette).
-- PDF generation uses `reportlab` if installed; otherwise falls back to a
-  plain-text byte stream so the app never breaks.
-- Architecture cleanly separates **UI (components/pages_logic)** from
-  **business/data logic (utils)** for maintainability and testability.
+- **Palette:** Medical blue (`#1565C0`) on white, with success/warning/danger
+  semantic colors for healing status.
+- **Cards:** 16–22px rounded corners, soft layered shadows, 1px hairline borders.
+- **Typography:** Inter / system sans, bold 700–800 weight headings.
+- **Charts:** Plotly, transparent backgrounds, soft gridlines, branded hover tooltips.
+
+## Architecture Notes
+
+- `utils/data_generator.py` is the single point where this prototype's
+  synthetic data lives — swap it for real API/database calls without
+  touching any UI code.
+- All HTML/CSS rendering is isolated inside `components/*.py`, keeping
+  `app.py` a thin orchestration layer.
+- `st.cache_data` is used for the patient roster to avoid regenerating
+  synthetic data on every rerun.

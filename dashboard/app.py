@@ -1,9 +1,11 @@
 """
 app.py
 ------
-Entry point for the "Wound Monitoring – Doctor Dashboard" Streamlit
-application. Handles page configuration, global styling, sidebar
-navigation and routing to individual page modules.
+Entry point for the Wound Monitoring – Doctor Dashboard.
+
+This file is intentionally thin: it wires together reusable
+components (sidebar, cards, charts) and page-level renderers,
+keeping business logic in `utils/` and presentation in `components/`.
 
 Run with:
     streamlit run app.py
@@ -11,47 +13,149 @@ Run with:
 
 import streamlit as st
 
-from utils.helpers import load_css
-from utils.data_generator import generate_patient_roster
-from components.sidebar_nav import render_sidebar
+from components.ai_insights import render_ai_insights
+from components.charts import render_chart_grid
 from components.footer import render_footer
-from pages_logic import dashboard, patient_history, upload_images, ai_analysis, reports, settings
+from components.kpi_cards import render_kpi_row
+from components.patient_card import render_patient_card
+from components.patient_history import render_patient_history
+from components.patient_search import render_patient_search
+from components.prediction_card import render_prediction_card
+from components.reports_section import render_reports_section
+from components.settings_section import render_settings_section
+from components.sidebar import render_sidebar
+from components.upload_section import render_upload_section
+from utils.data_generator import (
+    compute_kpis,
+    generate_ai_insights,
+    generate_patient_list,
+    generate_reasons,
+    generate_wound_timeseries,
+    get_patient_detail,
+)
+from utils.helpers import load_css
+
+# ----------------------------------------------------------------------
+# Page configuration — must be the first Streamlit call
+# ----------------------------------------------------------------------
+st.set_page_config(
+    page_title="Wound Monitoring | Doctor Dashboard",
+    page_icon="🩺",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+load_css("styles/style.css")
 
 
-def configure_page() -> None:
-    st.set_page_config(
-        page_title="Wound Monitoring – Doctor Dashboard",
-        page_icon="🩺",
-        layout="wide",
-        initial_sidebar_state="expanded",
-    )
-
-
+# ----------------------------------------------------------------------
+# Cached data layer (simulates a backend / clinical DB call)
+# ----------------------------------------------------------------------
 @st.cache_data(show_spinner=False)
-def load_patient_roster():
-    """Cached synthetic patient roster — replace with EMR/DB query in production."""
-    return generate_patient_roster(n=48)
+def _load_roster():
+    return generate_patient_list(n=48)
 
 
-def main() -> None:
-    configure_page()
-    load_css("styles/custom.css")
+roster = _load_roster()
 
-    df = load_patient_roster()
-    selected_page = render_sidebar()
+# ----------------------------------------------------------------------
+# Sidebar navigation
+# ----------------------------------------------------------------------
+active_page = render_sidebar()
 
-    routes = {
-        "Dashboard": lambda: dashboard.render(df),
-        "Patient History": lambda: patient_history.render(df),
-        "Upload Images": lambda: upload_images.render(df),
-        "AI Analysis": lambda: ai_analysis.render(df),
-        "Reports": lambda: reports.render(df),
-        "Settings": lambda: settings.render(),
-    }
+# ----------------------------------------------------------------------
+# Page header
+# ----------------------------------------------------------------------
+st.markdown('<div class="page-title">🩺 Wound Monitoring Doctor Dashboard</div>',
+            unsafe_allow_html=True)
+st.markdown(
+    '<div class="page-subtitle">⚠️ Research Prototype – Not for Clinical Use</div>',
+    unsafe_allow_html=True,
+)
 
-    routes[selected_page]()
-    render_footer()
+# ----------------------------------------------------------------------
+# Persisted state: selected patient
+# ----------------------------------------------------------------------
+if "selected_case_id" not in st.session_state:
+    st.session_state.selected_case_id = roster.iloc[0]["case_id"]
 
 
-if __name__ == "__main__":
-    main()
+# ========================================================================
+# PAGE: DASHBOARD
+# ========================================================================
+if active_page == "Dashboard":
+    kpis = compute_kpis(roster)
+    render_kpi_row(kpis)
+
+    selected_id = render_patient_search(roster)
+    st.session_state.selected_case_id = selected_id
+
+    patient = get_patient_detail(st.session_state.selected_case_id, roster)
+    timeseries = generate_wound_timeseries()
+    insights = generate_ai_insights(patient["status"])
+    reasons = generate_reasons(patient["status"])
+
+    col_left, col_right = st.columns([1, 1.55])
+    with col_left:
+        render_patient_card(patient)
+    with col_right:
+        render_prediction_card(patient, reasons)
+
+    render_ai_insights(insights)
+
+    st.markdown('<div class="section-title">📈 Wound Progress Analytics</div>',
+                unsafe_allow_html=True)
+    render_chart_grid(timeseries)
+
+# ========================================================================
+# PAGE: PATIENT HISTORY
+# ========================================================================
+elif active_page == "Patient History":
+    render_patient_history(roster)
+
+# ========================================================================
+# PAGE: UPLOAD IMAGES
+# ========================================================================
+elif active_page == "Upload Images":
+    patient = get_patient_detail(st.session_state.selected_case_id, roster)
+    st.markdown(
+        f'<div class="info-label">Active patient: '
+        f'<span style="color:var(--primary)">{patient["name"]} '
+        f'({patient["case_id"]})</span></div>',
+        unsafe_allow_html=True,
+    )
+    render_upload_section()
+
+# ========================================================================
+# PAGE: AI ANALYSIS
+# ========================================================================
+elif active_page == "AI Analysis":
+    patient = get_patient_detail(st.session_state.selected_case_id, roster)
+    timeseries = generate_wound_timeseries()
+    insights = generate_ai_insights(patient["status"])
+    reasons = generate_reasons(patient["status"])
+
+    render_prediction_card(patient, reasons)
+    render_ai_insights(insights)
+    st.markdown('<div class="section-title">📈 Supporting Analytics</div>',
+                unsafe_allow_html=True)
+    render_chart_grid(timeseries)
+
+# ========================================================================
+# PAGE: REPORTS
+# ========================================================================
+elif active_page == "Reports":
+    patient = get_patient_detail(st.session_state.selected_case_id, roster)
+    timeseries = generate_wound_timeseries()
+    render_reports_section(roster, patient, timeseries)
+
+# ========================================================================
+# PAGE: SETTINGS
+# ========================================================================
+elif active_page == "Settings":
+    render_settings_section()
+
+# ----------------------------------------------------------------------
+# Footer
+# ----------------------------------------------------------------------
+render_footer()
