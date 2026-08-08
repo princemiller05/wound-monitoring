@@ -27,13 +27,18 @@ App                Blob Storage           Function                 Firestore
 
 ## Filename rule (important)
 
-Everything keys off the blob name. The app must upload each photo as:
+Everything keys off the blob name. The app uploads each photo as:
 
 ```
-{patient_id}/{patient_id}_DAY{n}.jpg     e.g.  CASE_001/CASE_001_DAY7.jpg
+{patient_id}/{patient_id}_DAY{n}_{timestamp_ms}.jpg
+e.g.  CASE_001/CASE_001_DAY7_1723100000000.jpg
 ```
 
 `on_image_uploaded` reads the patient id and day number straight from that path.
+The trailing millisecond timestamp makes every photo a **unique** record, so
+nothing overwrites and multiple photos on the same day coexist honestly (with
+their true capture times). The healing trend keeps **one point per day** — if
+there are several photos on a day, the most recent one is used.
 
 ## Endpoint contract (as deployed)
 
