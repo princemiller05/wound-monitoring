@@ -35,3 +35,4 @@ venv/
 .venv/
 azure/sample-request.json
 sample_images/
+dashboard/.streamlit/secrets.toml

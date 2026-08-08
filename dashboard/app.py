@@ -13,6 +13,12 @@ Run with:
 
 import streamlit as st
 
+if not st.user.is_logged_in:
+    st.login()
+    st.stop()
+
+st.sidebar.success(f"Welcome {st.user.name}")
+st.sidebar.write(st.user.email)
 from components.ai_insights import render_ai_insights
 from components.charts import render_chart_grid
 from components.footer import render_footer
