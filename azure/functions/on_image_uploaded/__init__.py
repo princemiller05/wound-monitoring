@@ -49,22 +49,32 @@ ML_KEY = os.environ["ML_ENDPOINT_KEY"]
 
 def _parse_ids(blob_name: str):
     """
-    blob_name looks like 'wound-photos/CASE_001/CASE_001_DAY7.jpg' (it may or
-    may not include the container prefix). Returns (patient_id, day_number,
-    image_id) or raises ValueError if the filename doesn't follow the rule.
+    blob_name looks like 'wound-photos/CASE_001/CASE_001_DAY7_1723100000000.jpg'
+    (it may or may not include the container prefix). The trailing number is the
+    capture timestamp in milliseconds, which makes each photo unique so nothing
+    overwrites and multiple photos on the same day can coexist honestly.
+
+    Returns (patient_id, day_number, image_id, captured_ms).
     """
     # Drop the container prefix if present, keep the rest of the path.
     path = blob_name.split("wound-photos/", 1)[-1]
     parts = path.split("/")
-    filename = parts[-1]                       # CASE_001_DAY7.jpg
+    filename = parts[-1]                       # CASE_001_DAY7_1723100000000.jpg
     patient_id = parts[0] if len(parts) > 1 else filename.split("_DAY")[0]
 
     m = re.search(r"_DAY(\d+)", filename)
     if not m:
         raise ValueError(f"Filename '{filename}' has no _DAY<n> — cannot parse day.")
     day_number = int(m.group(1))
-    image_id = os.path.splitext(filename)[0]   # CASE_001_DAY7
-    return patient_id, day_number, image_id
+
+    # Unique per-photo id (the whole filename without extension). Because it
+    # includes the timestamp, two photos on the same day get different ids.
+    image_id = os.path.splitext(filename)[0]
+
+    ts = re.search(r"_(\d+)\.jpg$", filename, re.IGNORECASE)
+    captured_ms = int(ts.group(1)) if ts else 0
+
+    return patient_id, day_number, image_id, captured_ms
 
 
 def _call_ml(image_bytes: bytes, case_id: str, image_id: str) -> dict:
@@ -104,7 +114,7 @@ def _trend(area_series):
 
 
 def main(blob: func.InputStream):
-    patient_id, day_number, image_id = _parse_ids(blob.name)
+    patient_id, day_number, image_id, captured_ms = _parse_ids(blob.name)
 
     # 1) analyse this one photo
     result = _call_ml(blob.read(), patient_id, image_id)
@@ -112,11 +122,12 @@ def main(blob: func.InputStream):
     tis = result["tissue"]
     heal = result["healing"]
 
-    # 2) save the per-photo result. We key the doc by image_id so this is
-    #    idempotent and doesn't depend on the app having written the doc first.
+    # 2) save the per-photo result. Keyed by the unique image_id (which includes
+    #    the timestamp), so every photo is its own record — no overwriting.
     db.collection("wound_photos").document(image_id).set({
         "patient_id": patient_id,
         "day_number": day_number,
+        "captured_ms": captured_ms,
         "blob_path": blob.name.split("wound-photos/", 1)[-1],
         "area_px": seg["area_px"],
         "granulation_pct": tis["granulation_pct"],
@@ -127,11 +138,20 @@ def main(blob: func.InputStream):
         "analyzed": True,
     }, merge=True)
 
-    # 3) gather every analysed photo for this patient, sorted by day
+    # 3) gather every analysed photo for this patient
     docs = (db.collection("wound_photos")
               .where("patient_id", "==", patient_id)
               .where("analyzed", "==", True).stream())
-    rows = sorted([d.to_dict() for d in docs], key=lambda x: x["day_number"])
+    all_rows = [d.to_dict() for d in docs]
+
+    # The healing trend is one point per DAY, so if a patient took several
+    # photos on the same day we keep the most recent one for that day.
+    by_day = {}
+    for r in all_rows:
+        d = r.get("day_number", 0)
+        if d not in by_day or r.get("captured_ms", 0) >= by_day[d].get("captured_ms", 0):
+            by_day[d] = r
+    rows = sorted(by_day.values(), key=lambda x: x["day_number"])
 
     area_series = [r["area_px"] for r in rows]
 
