@@ -5,11 +5,16 @@ wounds) to photograph their wound over time and follow its healing. It's the
 patient-facing front end for our Remote Wound Monitoring project — the ML
 pipeline (segmentation + tissue + healing prediction) is a separate repo.
 
-> **Heads up — this is Phase 1.** Right now the app runs entirely on *mock*
-> data so the whole experience could be built and demoed without waiting on the
-> cloud backend. The healing numbers you see are placeholders (they carry a
-> "Preview data" badge), and photos are only kept in memory. Real predictions,
-> accounts, and cloud storage come in later phases.
+> **Status — connected to the real cloud backend.** The app can now upload
+> photos to Azure Blob and show **real** predictions from the deployed DFU
+> pipeline (via the Azure Functions in `../azure/functions`). It flips between
+> mock and real with a single switch: `lib/services/api_config.dart`. While
+> `functionBaseUrl` is empty the app runs on mock data (safe default, and the
+> committed value is intentionally empty so no secrets are in this public repo);
+> set it locally to your Function App URL + key to use the live backend.
+>
+> Still using **mock auth** for now (any email/password) — real Firebase Auth
+> accounts are a later step; the pipeline currently keys data by the patient id.
 
 ## What works today
 

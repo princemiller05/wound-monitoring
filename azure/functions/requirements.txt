@@ -1,0 +1,5 @@
+# Python dependencies for the WoundWatch Azure Functions.
+azure-functions
+requests
+firebase-admin
+azure-storage-blob

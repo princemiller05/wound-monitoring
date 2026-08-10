@@ -266,26 +266,24 @@ class _PredictionCard extends StatelessWidget {
             const Text('Healing Prediction',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
-            Row(
-              children: [
-                Text('$pct%',
-                    style: TextStyle(
-                        fontSize: 44,
-                        fontWeight: FontWeight.bold,
-                        color: color)),
-                const SizedBox(width: 16),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(label,
-                      style: TextStyle(
-                          color: color, fontWeight: FontWeight.bold)),
-                ),
-              ],
+            // Percentage on top, status label below — stacked so a long label
+            // like "Consult your doctor" never overflows the row.
+            Text('$pct%',
+                style: TextStyle(
+                    fontSize: 44,
+                    fontWeight: FontWeight.bold,
+                    color: color)),
+            const SizedBox(height: 8),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(label,
+                  style:
+                      TextStyle(color: color, fontWeight: FontWeight.bold)),
             ),
             const SizedBox(height: 16),
             const Text('What this is based on:',
