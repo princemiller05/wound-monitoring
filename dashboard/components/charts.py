@@ -30,22 +30,22 @@ LAYOUT_DEFAULTS = dict(
 GRID_STYLE = dict(showgrid=True, gridcolor="#EEF2F7", zeroline=False)
 
 
-def wound_area_trend(df) -> go.Figure:
-    """Smooth line chart of wound area (cm²) over visits."""
+def wound_area_trend(df, unit_label="cm²", unit_col="wound_area_cm2") -> go.Figure:
+    """Smooth line chart of wound area over visits."""
     fig = go.Figure()
     fig.add_trace(go.Scatter(
-        x=df["visit_date"], y=df["wound_area_cm2"],
+        x=df["visit_date"], y=df[unit_col],
         mode="lines+markers",
         line=dict(color=PRIMARY, width=3, shape="spline"),
         marker=dict(size=8, color=PRIMARY, line=dict(width=2, color="white")),
         fill="tozeroy", fillcolor="rgba(21,101,192,0.08)",
-        hovertemplate="<b>%{x}</b><br>Wound Area: %{y} cm²<extra></extra>",
+        hovertemplate=f"<b>%{{x}}</b><br>Wound Area: %{{y}} {unit_label}<extra></extra>",
         name="Wound Area",
     ))
     fig.update_layout(**LAYOUT_DEFAULTS, height=320,
-                       title="Wound Area Trend (cm²)")
+                       title=f"Wound Area Trend ({unit_label})")
     fig.update_xaxes(**GRID_STYLE)
-    fig.update_yaxes(**GRID_STYLE, title="Area (cm²)")
+    fig.update_yaxes(**GRID_STYLE, title=f"Area ({unit_label})")
     return fig
 
 
@@ -88,9 +88,9 @@ def healing_probability_over_time(df) -> go.Figure:
     return fig
 
 
-def area_reduction_pct(df) -> go.Figure:
-    base = df["wound_area_cm2"].iloc[0]
-    reduction = [round((base - a) / base * 100, 1) for a in df["wound_area_cm2"]]
+def area_reduction_pct(df, unit_col="wound_area_cm2") -> go.Figure:
+    base = df[unit_col].iloc[0]
+    reduction = [round((base - a) / base * 100, 1) for a in df[unit_col]]
     colors = [SUCCESS if r >= 0 else DANGER for r in reduction]
     fig = go.Figure(go.Bar(
         x=df["visit_date"], y=reduction, marker_color=colors,
@@ -142,9 +142,12 @@ def weekly_progress(df) -> go.Figure:
 
 def render_chart_grid(df) -> None:
     """Render the full 2-column responsive chart grid for a patient."""
+    unit_col = "wound_area_px" if "wound_area_px" in df.columns else "wound_area_cm2"
+    unit_label = "px²" if unit_col == "wound_area_px" else "cm²"
+
     c1, c2 = st.columns(2)
     with c1:
-        st.plotly_chart(wound_area_trend(df), use_container_width=True,
+        st.plotly_chart(wound_area_trend(df, unit_label, unit_col), use_container_width=True,
                          config={"displayModeBar": False})
     with c2:
         st.plotly_chart(tissue_composition(df), use_container_width=True,
@@ -155,7 +158,7 @@ def render_chart_grid(df) -> None:
         st.plotly_chart(healing_probability_over_time(df), use_container_width=True,
                          config={"displayModeBar": False})
     with c4:
-        st.plotly_chart(area_reduction_pct(df), use_container_width=True,
+        st.plotly_chart(area_reduction_pct(df, unit_col), use_container_width=True,
                          config={"displayModeBar": False})
 
     c5, c6 = st.columns([1.3, 1])

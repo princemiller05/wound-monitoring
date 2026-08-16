@@ -32,11 +32,12 @@ def render_patient_search(roster) -> str:
         search_clicked = st.button("🔎 Search Patient", use_container_width=True)
 
     if search_clicked and manual_id.strip():
-        match = roster[roster["case_id"].str.lower() == manual_id.strip().lower()]
+        typed_id = manual_id.strip()
+        match = roster[roster["case_id"].str.lower() == typed_id.lower()]
         if not match.empty:
             selected_case_id = match.iloc[0]["case_id"]
         else:
-            st.warning(f"No patient found with Case ID '{manual_id}'.")
+            selected_case_id = typed_id
 
     st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
     f1, f2, f3, f4 = st.columns(4)

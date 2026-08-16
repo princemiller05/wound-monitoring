@@ -40,6 +40,7 @@ from utils.data_generator import (
     get_patient_detail,
 )
 from utils.helpers import load_css
+from utils.backend import build_patient_overlay, get_real_patient_data
 
 # ----------------------------------------------------------------------
 # Page configuration — must be the first Streamlit call
@@ -89,15 +90,27 @@ if "selected_case_id" not in st.session_state:
 # ========================================================================
 # PAGE: DASHBOARD
 # ========================================================================
+REAL_DATA_PATIENTS = {"CASE_001"}
+
 if active_page == "Dashboard":
     kpis = compute_kpis(roster)
     render_kpi_row(kpis)
-
     selected_id = render_patient_search(roster)
     st.session_state.selected_case_id = selected_id
 
-    patient = get_patient_detail(st.session_state.selected_case_id, roster)
-    timeseries = generate_wound_timeseries()
+    if selected_id in REAL_DATA_PATIENTS:
+        try:
+            patient, history = build_patient_overlay(selected_id, roster)
+            _, timeseries = get_real_patient_data(selected_id)
+            st.info("📡 Live data from Azure ML pipeline", icon="📡")
+        except Exception as exc:
+            st.error(f"Could not load real data for {selected_id}: {exc}")
+            patient = get_patient_detail(selected_id, roster)
+            timeseries = generate_wound_timeseries()
+    else:
+        patient = get_patient_detail(st.session_state.selected_case_id, roster)
+        timeseries = generate_wound_timeseries()
+
     insights = generate_ai_insights(patient["status"])
     reasons = generate_reasons(patient["status"])
 
