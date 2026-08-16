@@ -40,7 +40,7 @@ from utils.data_generator import (
     get_patient_detail,
 )
 from utils.helpers import load_css
-from utils.backend import build_patient_overlay, get_real_patient_data
+from utils.backend import build_patient_overlay, get_real_patient_data, has_real_data
 
 # ----------------------------------------------------------------------
 # Page configuration — must be the first Streamlit call
@@ -90,15 +90,13 @@ if "selected_case_id" not in st.session_state:
 # ========================================================================
 # PAGE: DASHBOARD
 # ========================================================================
-REAL_DATA_PATIENTS = {"CASE_001"}
-
 if active_page == "Dashboard":
     kpis = compute_kpis(roster)
     render_kpi_row(kpis)
     selected_id = render_patient_search(roster)
     st.session_state.selected_case_id = selected_id
 
-    if selected_id in REAL_DATA_PATIENTS:
+    if has_real_data(selected_id):
         try:
             patient, history = build_patient_overlay(selected_id, roster)
             _, timeseries = get_real_patient_data(selected_id)

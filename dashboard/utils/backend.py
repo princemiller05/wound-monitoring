@@ -91,3 +91,13 @@ def build_patient_overlay(patient_id: str, roster) -> tuple[dict, dict]:
     base["risk_level"] = RISK_MAP[status]
     base["healing_probability"] = round(history["healing_probability"] * 100, 1)
     return base, history
+
+
+def has_real_data(patient_id: str) -> bool:
+    """Check whether the Azure Function has real prediction data for this
+    patient ID, without raising. Used to decide which data path to use."""
+    try:
+        get_patient_history(patient_id)
+        return True
+    except Exception:
+        return False
