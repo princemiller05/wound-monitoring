@@ -39,7 +39,7 @@ def _build_gauge(probability: float, color: str) -> go.Figure:
     return fig
 
 
-def render_prediction_card(patient: dict, reasons: list[str]) -> None:
+def render_prediction_card(patient: dict) -> None:
     status = patient["status"]
     prob = patient["healing_probability"]
     color = status_color(status)
@@ -81,12 +81,5 @@ def render_prediction_card(patient: dict, reasons: list[str]) -> None:
             unsafe_allow_html=True,
         )
 
-    st.markdown(
-        '<div class="prediction-reasons"><div class="info-label">Key Reasons</div></div>',
-        unsafe_allow_html=True,
-    )
-    chips = "".join(
-        f'<span class="reason-chip">🔹 {r}</span>' for r in reasons
-    )
-    st.markdown(chips, unsafe_allow_html=True)
+    
     st.markdown("</div>", unsafe_allow_html=True)
