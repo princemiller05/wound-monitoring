@@ -141,7 +141,8 @@ def weekly_progress(df) -> go.Figure:
 
 
 def render_chart_grid(df) -> None:
-    """Render the full 2-column responsive chart grid for a patient."""
+    """Render the essential chart grid for a patient: wound area trend and
+    tissue composition side by side, with healing probability full-width below."""
     unit_col = "wound_area_px" if "wound_area_px" in df.columns else "wound_area_cm2"
     unit_label = "px²" if unit_col == "wound_area_px" else "cm²"
 
@@ -153,18 +154,5 @@ def render_chart_grid(df) -> None:
         st.plotly_chart(tissue_composition(df), use_container_width=True,
                          config={"displayModeBar": False})
 
-    c3, c4 = st.columns(2)
-    with c3:
-        st.plotly_chart(healing_probability_over_time(df), use_container_width=True,
-                         config={"displayModeBar": False})
-    with c4:
-        st.plotly_chart(area_reduction_pct(df, unit_col), use_container_width=True,
-                         config={"displayModeBar": False})
-
-    c5, c6 = st.columns([1.3, 1])
-    with c5:
-        st.plotly_chart(weekly_progress(df), use_container_width=True,
-                         config={"displayModeBar": False})
-    with c6:
-        st.plotly_chart(visit_timeline(df), use_container_width=True,
-                         config={"displayModeBar": False})
+    st.plotly_chart(healing_probability_over_time(df), use_container_width=True,
+                     config={"displayModeBar": False})

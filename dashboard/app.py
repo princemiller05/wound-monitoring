@@ -19,7 +19,6 @@ if not st.user.is_logged_in:
 
 st.sidebar.success(f"Welcome {st.user.name}")
 st.sidebar.write(st.user.email)
-from components.ai_insights import render_ai_insights
 from components.charts import render_chart_grid
 from components.footer import render_footer
 from components.kpi_cards import render_kpi_row
@@ -33,9 +32,7 @@ from components.sidebar import render_sidebar
 from components.upload_section import render_upload_section
 from utils.data_generator import (
     compute_kpis,
-    generate_ai_insights,
     generate_patient_list,
-    generate_reasons,
     generate_wound_timeseries,
     get_patient_detail,
 )
@@ -109,16 +106,11 @@ if active_page == "Dashboard":
         patient = get_patient_detail(st.session_state.selected_case_id, roster)
         timeseries = generate_wound_timeseries()
 
-    insights = generate_ai_insights(patient["status"])
-    reasons = generate_reasons(patient["status"])
-
     col_left, col_right = st.columns([1, 1.55])
     with col_left:
         render_patient_card(patient)
     with col_right:
-        render_prediction_card(patient, reasons)
-
-    render_ai_insights(insights)
+        render_prediction_card(patient)
 
     st.markdown('<div class="section-title">📈 Wound Progress Analytics</div>',
                 unsafe_allow_html=True)
@@ -149,11 +141,8 @@ elif active_page == "Upload Images":
 elif active_page == "AI Analysis":
     patient = get_patient_detail(st.session_state.selected_case_id, roster)
     timeseries = generate_wound_timeseries()
-    insights = generate_ai_insights(patient["status"])
-    reasons = generate_reasons(patient["status"])
 
-    render_prediction_card(patient, reasons)
-    render_ai_insights(insights)
+    render_prediction_card(patient)
     st.markdown('<div class="section-title">📈 Supporting Analytics</div>',
                 unsafe_allow_html=True)
     render_chart_grid(timeseries)
