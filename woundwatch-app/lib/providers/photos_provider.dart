@@ -95,6 +95,59 @@ class PhotosProvider extends ChangeNotifier {
     }
   }
 
+  /// Import several photos at once, each labelled with the real day it was
+  /// taken. Uploads them all, then waits for the backend to analyse them and
+  /// build the day-by-day trend. Honest onboarding of an existing photo history.
+  Future<void> importPhotos(List<WoundPhoto> photos, String patientId) async {
+    _photos.addAll(photos);
+    notifyListeners();
+
+    if (!ApiConfig.useRealBackend) {
+      await refreshPrediction(patientId);
+      return;
+    }
+
+    _loading = true;
+    notifyListeners();
+    try {
+      for (int i = 0; i < photos.length; i++) {
+        _status = 'Uploading ${i + 1}/${photos.length}…';
+        notifyListeners();
+        await UploadService.uploadPhoto(
+          image: File(photos[i].localPath),
+          patientId: patientId,
+          dayNumber: photos[i].dayNumber,
+        );
+      }
+
+      // How many distinct days should show up once everything is analysed.
+      final wantDays = photos.map((p) => p.dayNumber).toSet().length;
+      _status = 'Analysing ${photos.length} photos…';
+      notifyListeners();
+      for (int attempt = 0; attempt < 15; attempt++) {
+        await Future.delayed(const Duration(seconds: 5));
+        final pred = await _fetchRealPrediction(patientId);
+        if (pred != null) {
+          _prediction = pred; // show partial progress as days come in
+          notifyListeners();
+          if (pred.daySeries.length >= wantDays) {
+            _status = null;
+            _loading = false;
+            notifyListeners();
+            return;
+          }
+        }
+      }
+      _status = 'Still analysing — check Progress shortly';
+      _loading = false;
+      notifyListeners();
+    } catch (e) {
+      _status = 'Import failed: $e';
+      _loading = false;
+      notifyListeners();
+    }
+  }
+
   /// Load the latest prediction — from the cloud if configured, else mock.
   Future<void> refreshPrediction(String patientId) async {
     _loading = true;
