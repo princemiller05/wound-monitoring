@@ -11,7 +11,7 @@ from utils.helpers import get_initials, risk_badge_class, status_badge_class
 
 
 def render_patient_card(patient: dict) -> None:
-    st.markdown('<div class="card">', unsafe_allow_html=True)
+    
     st.markdown(
         '<div class="section-title">🧑‍⚕️ Patient Information</div>',
         unsafe_allow_html=True,

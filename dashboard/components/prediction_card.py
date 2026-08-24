@@ -45,7 +45,7 @@ def render_prediction_card(patient: dict) -> None:
     color = status_color(status)
     confidence = min(99, prob + 6) if status != "Stable" else prob - 4
 
-    st.markdown('<div class="card">', unsafe_allow_html=True)
+    
     st.markdown(
         '<div class="section-title">🧠 AI Healing Prediction</div>',
         unsafe_allow_html=True,
@@ -82,4 +82,4 @@ def render_prediction_card(patient: dict) -> None:
         )
 
     
-    st.markdown("</div>", unsafe_allow_html=True)
+    

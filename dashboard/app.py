@@ -18,7 +18,10 @@ if not st.user.is_logged_in:
     st.stop()
 
 st.sidebar.success(f"Welcome {st.user.name}")
+
 st.sidebar.write(st.user.email)
+
+from components.ai_insights import render_ai_insights
 from components.charts import render_chart_grid
 from components.footer import render_footer
 from components.kpi_cards import render_kpi_row
@@ -65,7 +68,7 @@ roster = _load_roster()
 # ----------------------------------------------------------------------
 # Sidebar navigation
 # ----------------------------------------------------------------------
-active_page = render_sidebar()
+active_page = "Dashboard"
 
 # ----------------------------------------------------------------------
 # Page header
@@ -88,8 +91,7 @@ if "selected_case_id" not in st.session_state:
 # PAGE: DASHBOARD
 # ========================================================================
 if active_page == "Dashboard":
-    kpis = compute_kpis(roster)
-    render_kpi_row(kpis)
+    
     selected_id = render_patient_search(roster)
     st.session_state.selected_case_id = selected_id
 
@@ -111,6 +113,8 @@ if active_page == "Dashboard":
         render_patient_card(patient)
     with col_right:
         render_prediction_card(patient)
+
+    render_ai_insights(insights)
 
     st.markdown('<div class="section-title">📈 Wound Progress Analytics</div>',
                 unsafe_allow_html=True)
