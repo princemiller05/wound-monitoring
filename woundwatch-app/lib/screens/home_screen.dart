@@ -7,6 +7,7 @@ import '../providers/photos_provider.dart';
 import '../utils/constants.dart';
 import '../theme/app_theme.dart';
 import 'camera_screen.dart';
+import 'import_photos_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   /// Lets the dashboard switch the bottom-nav tab (e.g. tap healing card → Progress).
@@ -41,7 +42,18 @@ class HomeScreen extends StatelessWidget {
                   MaterialPageRoute(builder: (_) => const CameraScreen()),
                 ),
               ),
-              const SizedBox(height: 28),
+              const SizedBox(height: 10),
+              Center(
+                child: TextButton.icon(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                        builder: (_) => const ImportPhotosScreen()),
+                  ),
+                  icon: const Icon(Icons.collections_outlined, size: 18),
+                  label: const Text('Import past photos'),
+                ),
+              ),
+              const SizedBox(height: 18),
 
               const Text('OVERVIEW', style: AppText.overline),
               const SizedBox(height: 10),
