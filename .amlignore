@@ -7,8 +7,12 @@
 .git/
 
 # Virtual environments
+# NOTE: `venv/` matches only a directory named exactly "venv", so the
+# venv-pipeline/ environment needs its own entry (~42k files, which on its own
+# exceeds the 5000-file snapshot manifest limit).
 .venv/
 venv/
+venv-pipeline/
 
 # Python caches
 __pycache__/
@@ -30,3 +34,23 @@ models/
 *.pt
 *.pth
 *.onnx
+
+# Research/measurement data — local only, never part of a deployment
+# (real patient photographs and the IEEE methodology scripts/results)
+cohort/
+cohort_OLD_with_amputation/
+measure/
+
+# Stray test outputs and sample inputs — not needed by azure/score.py
+CASE_001_DAY0_overlay.png
+segment1.png
+sample_images/
+azure/sample-request.json
+
+# Flutter mobile app — nothing here is imported by the scoring script
+woundwatch-app/
+
+# Secrets. .gitignore already covers these, but .amlignore REPLACES it for
+# asset uploads, so they must be listed here too or they ship in the snapshot.
+firebase-key.json
+dashboard/.streamlit/secrets.toml
