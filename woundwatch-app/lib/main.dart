@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:firebase_core/firebase_core.dart';
 
 import 'theme/app_theme.dart';
 import 'providers/auth_provider.dart';
@@ -7,7 +8,14 @@ import 'providers/photos_provider.dart';
 import 'screens/login_screen.dart';
 import 'screens/main_scaffold.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  // Initialise Firebase from the native google-services.json (#1).
+  try {
+    await Firebase.initializeApp();
+  } catch (e) {
+    debugPrint('Firebase init failed: $e');
+  }
   runApp(const WoundWatchApp());
 }
 

@@ -11,7 +11,8 @@ dependencies:
       # Core: numerical, image, and plotting libraries used during inference.
       - numpy>=1.24,<2.0
       - pandas>=2.0,<3.0
-      - opencv-python-headless>=4.8,<5.0
+      # contrib build so cv2.aruco (marker calibration, item #30) is available
+      - opencv-contrib-python-headless>=4.8,<5.0
       - pillow>=10.0,<11.0
       - matplotlib>=3.7,<4.0
       - scikit-image>=0.21,<1.0

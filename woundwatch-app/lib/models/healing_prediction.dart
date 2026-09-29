@@ -14,6 +14,12 @@ class HealingPrediction {
   final List<double> necrosis;
   final bool isMock;
 
+  /// #25 — a healing score from a single photo is meaningless. When there's
+  /// only one visit, [enoughVisits] is false and the UI shows "waiting for
+  /// second visit" instead of a percentage.
+  final bool enoughVisits;
+  final int visits;
+
   HealingPrediction({
     required this.healingProbability,
     required this.predictedLabel,
@@ -24,6 +30,8 @@ class HealingPrediction {
     required this.slough,
     required this.necrosis,
     this.isMock = true,
+    this.enoughVisits = true,
+    this.visits = 0,
   });
 
   factory HealingPrediction.fromMap(Map<String, dynamic> map) {

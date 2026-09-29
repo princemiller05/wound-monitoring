@@ -11,7 +11,9 @@ environment: azureml:wound-monitoring-inference:4
 model: azureml:wound-monitoring-model-bundle:1
 
 instance_type: Standard_E4s_v3
-instance_count: 1
+# #34 — two instances so two photos arriving together don't queue behind each
+# other (with concurrency 1, only one was ever processed at a time).
+instance_count: 2
 app_insights_enabled: true
 
 readiness_probe:
@@ -27,6 +29,7 @@ liveness_probe:
   failure_threshold: 30
 
 request_settings:
-  request_timeout_ms: 90000
-  max_concurrent_requests_per_instance: 1
-  max_queue_wait_ms: 5000
+  # #34 — raise timeout (cold model load + inference) and allow 2 concurrent.
+  request_timeout_ms: 180000
+  max_concurrent_requests_per_instance: 2
+  max_queue_wait_ms: 10000

@@ -25,6 +25,9 @@ class SegmentationResult:
     bbox: List[int] = field(default_factory=list)   # [x1, y1, x2, y2]
     yolo_conf: float = 0.0        # YOLO's confidence in the detection
     detection_failed: bool = False # True if YOLO missed and we fell back to centre crop
+    # #30 — real-world measurement from the ArUco marker (None if no marker seen)
+    pixels_per_mm: Optional[float] = None
+    area_mm2: Optional[float] = None
     mask: Optional[np.ndarray] = field(default=None, repr=False)  # in-memory mask
 
 

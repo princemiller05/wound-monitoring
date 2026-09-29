@@ -93,25 +93,34 @@ class AppText {
 
   /// Large screen heading (tight tracking).
   static const TextStyle h1 = TextStyle(
-      fontSize: 25,
+      fontSize: 24,
       fontWeight: FontWeight.w700,
-      letterSpacing: -0.4,
+      letterSpacing: -0.5,
+      height: 1.1,
       color: AppColors.textDark);
 
   /// Section heading.
   static const TextStyle h2 = TextStyle(
-      fontSize: 17,
+      fontSize: 16.5,
       fontWeight: FontWeight.w700,
       letterSpacing: -0.2,
       color: AppColors.textDark);
 
+  /// Big data readout (e.g. a healing percentage). Tabular, tight.
+  static const TextStyle stat = TextStyle(
+      fontSize: 34,
+      fontWeight: FontWeight.w700,
+      letterSpacing: -1.2,
+      height: 1.0,
+      color: AppColors.textDark);
+
   /// Faint uppercase label above a group (e.g. "RECENT").
   static const TextStyle overline = TextStyle(
-      fontSize: 11.5,
+      fontSize: 11,
       fontWeight: FontWeight.w700,
-      letterSpacing: 1.1,
+      letterSpacing: 1.3,
       color: AppColors.textFaint);
 
   static const TextStyle muted =
-      TextStyle(fontSize: 14, color: AppColors.textMuted, height: 1.35);
+      TextStyle(fontSize: 13.5, color: AppColors.textMuted, height: 1.4);
 }

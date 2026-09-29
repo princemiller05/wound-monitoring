@@ -41,9 +41,21 @@ def _build_gauge(probability: float, color: str) -> go.Figure:
 
 def render_prediction_card(patient: dict) -> None:
     status = patient["status"]
-    prob = patient["healing_probability"]
+    prob = patient.get("healing_probability")
     color = status_color(status)
-    confidence = min(99, prob + 6) if status != "Stable" else prob - 4
+    # #57 — REMOVED an invented "confidence = min(99, prob + 6)" figure. It was
+    # made up (not produced by any model) and shown to a doctor as if real.
+
+    # #54 — with fewer than two visits a healing score is meaningless. Say so
+    # clearly instead of showing a number (prob is None in this case).
+    if not patient.get("enough_visits", True) or prob is None:
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.markdown('<div class="section-title">🧠 AI Healing Prediction</div>',
+                    unsafe_allow_html=True)
+        st.info("Waiting for a second visit — a healing trend needs at least "
+                "two photos taken on different days.")
+        st.markdown("</div>", unsafe_allow_html=True)
+        return
 
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.markdown(
@@ -69,11 +81,7 @@ def render_prediction_card(patient: dict) -> None:
             </div>
             <div style="margin-top:10px; display:flex; gap:24px;">
                 <div>
-                    <div class="info-label">Confidence Score</div>
-                    <div class="info-value">{confidence:.1f}%</div>
-                </div>
-                <div>
-                    <div class="info-label">7-Day Trend</div>
+                    <div class="info-label">Trend</div>
                     <div class="info-value">{'↑ Improving' if status=='Healing' else ('↓ Declining' if status=='Non-Healing' else '→ Plateauing')}</div>
                 </div>
             </div>

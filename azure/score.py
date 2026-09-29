@@ -266,6 +266,8 @@ def _pipeline_result_to_json(result):
             "overlay_path": result.segmentation.overlay_path,
             "crop_path": result.segmentation.crop_path,
             "area_px": _json_safe(result.segmentation.area_px),
+            "area_mm2": _json_safe(getattr(result.segmentation, "area_mm2", None)),
+            "pixels_per_mm": _json_safe(getattr(result.segmentation, "pixels_per_mm", None)),
             "bbox": _json_safe(result.segmentation.bbox),
             "yolo_conf": _json_safe(result.segmentation.yolo_conf),
             "detection_failed": _json_safe(result.segmentation.detection_failed),

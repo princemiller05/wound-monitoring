@@ -12,6 +12,10 @@ class WoundPhoto {
   final List<String> symptoms;
   final String notes;
 
+  /// Where on the body this wound is. Captured per-photo at upload time (not at
+  /// registration) — a general wound monitor doesn't assume one fixed site.
+  final String? woundLocation;
+
   WoundPhoto({
     required this.id,
     required this.patientId,
@@ -21,6 +25,7 @@ class WoundPhoto {
     this.painLevel = 0,
     this.symptoms = const [],
     this.notes = '',
+    this.woundLocation,
   });
 
   Map<String, dynamic> toMap() => {
@@ -32,6 +37,7 @@ class WoundPhoto {
         'painLevel': painLevel,
         'symptoms': symptoms,
         'notes': notes,
+        'woundLocation': woundLocation,
       };
 
   factory WoundPhoto.fromMap(Map<String, dynamic> map) => WoundPhoto(
@@ -43,5 +49,6 @@ class WoundPhoto {
         painLevel: map['painLevel'] as int? ?? 0,
         symptoms: (map['symptoms'] as List?)?.cast<String>() ?? const [],
         notes: map['notes'] as String? ?? '',
+        woundLocation: map['woundLocation'] as String?,
       );
 }

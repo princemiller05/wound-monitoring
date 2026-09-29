@@ -128,9 +128,16 @@ class _ProfileTab extends StatelessWidget {
                   child: Column(
                     children: [
                       row('Phone', patient.phone),
-                      row('Clinician', patient.clinicianName),
-                      row('Wound location', patient.woundLocation),
-                      row('Diabetes type', patient.diabetesType),
+                      row('Height', patient.heightCm != null
+                          ? '${patient.heightCm!.toStringAsFixed(0)} cm'
+                          : null),
+                      row('Weight', patient.weightKg != null
+                          ? '${patient.weightKg!.toStringAsFixed(0)} kg'
+                          : null),
+                      row('BMI', patient.bmi?.toStringAsFixed(1)),
+                      row('Doctors', patient.doctorEmails.isEmpty
+                          ? 'None added'
+                          : patient.doctorEmails.join(', ')),
                     ],
                   ),
                 ),

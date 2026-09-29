@@ -7,21 +7,21 @@ import 'package:flutter/material.dart';
 class AppColors {
   AppColors._();
 
-  /// Primary accent (a calm, slightly deep clinical teal). Used sparingly.
-  static const Color primary = Color(0xFF11816A);
-  static const Color primaryDark = Color(0xFF0C6151);
-  static const Color primaryLight = Color(0xFFEAF3F0); // tint for chips/fills
+  /// Primary accent (a deep clinical teal). Used sparingly — one accent only.
+  static const Color primary = Color(0xFF0E7361);
+  static const Color primaryDark = Color(0xFF0A574A);
+  static const Color primaryLight = Color(0xFFE7F1EE); // tint for chips/fills
 
   // Cool, near-white clinical surfaces defined by hairline borders, not shadows.
-  static const Color background = Color(0xFFF6F8F8);
+  static const Color background = Color(0xFFF4F6F7);
   static const Color card = Colors.white;
-  static const Color border = Color(0xFFE4EAE8);
+  static const Color border = Color(0xFFE2E8E7);
   static const Color divider = Color(0xFFEDF1F0);
 
   // Ink hierarchy: strong heading ink, muted body, faint labels.
-  static const Color textDark = Color(0xFF17211F);
-  static const Color textMuted = Color(0xFF64726D);
-  static const Color textFaint = Color(0xFF98A6A1);
+  static const Color textDark = Color(0xFF13201D);
+  static const Color textMuted = Color(0xFF5F6E69);
+  static const Color textFaint = Color(0xFF93A29D);
 
   // Healing-status colors (deeper, less neon — reads as medical, not playful).
   static const Color healingGood = Color(0xFF11816A);
@@ -37,9 +37,10 @@ class AppColors {
 class AppSizes {
   AppSizes._();
 
-  static const double screenPadding = 22.0;
-  static const double cardRadius = 12.0;
-  static const double gap = 16.0;
+  static const double screenPadding = 20.0;
+  static const double cardRadius = 14.0;
+  static const double cardPadding = 18.0;
+  static const double gap = 14.0;
 }
 
 /// Symptom chips shown on the preview screen.
@@ -52,18 +53,23 @@ const List<String> kSymptoms = [
   'None',
 ];
 
-/// Wound-location options for the profile.
+/// Wound-location options, chosen per-photo at upload time. A general wound
+/// monitor covers wounds anywhere on the body, not just the foot.
 const List<String> kWoundLocations = [
-  'Left foot',
-  'Right foot',
-  'Left toe',
-  'Right toe',
-  'Heel',
+  'Foot',
+  'Ankle',
+  'Lower leg / shin',
+  'Knee',
+  'Thigh',
+  'Hip / buttock',
+  'Lower back',
+  'Abdomen',
+  'Chest',
+  'Arm',
+  'Hand',
+  'Head / face',
   'Other',
 ];
-
-/// Diabetes-type options for the profile.
-const List<String> kDiabetesTypes = ['Type 1', 'Type 2', 'Other'];
 
 /// Gender options for sign-up.
 const List<String> kGenders = ['Male', 'Female', 'Prefer not to say'];

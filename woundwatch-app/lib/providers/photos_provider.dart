@@ -62,10 +62,19 @@ class PhotosProvider extends ChangeNotifier {
     _status = 'Uploading photo…';
     notifyListeners();
     try {
-      await UploadService.uploadPhoto(
+      final imageId = await UploadService.uploadPhoto(
         image: File(photo.localPath),
         patientId: photo.patientId,
         dayNumber: photo.dayNumber,
+      );
+      // #16 — save the patient-reported pain / symptoms / notes onto the record.
+      await UploadService.saveVisitMeta(
+        imageId: imageId,
+        patientId: photo.patientId,
+        painLevel: photo.painLevel,
+        symptoms: photo.symptoms,
+        notes: photo.notes,
+        woundLocation: photo.woundLocation,
       );
       // The blob-trigger function analyses the photo in the background, and the
       // ML endpoint can be slow on its first ("cold") call. So poll the history
@@ -182,23 +191,30 @@ class PhotosProvider extends ChangeNotifier {
     final data = jsonDecode(resp.body) as Map<String, dynamic>;
     if (data['status'] == 'no_data') return null;
 
-    final tissue = (data['tissue_series'] as Map?) ?? const {};
+    // New response shape: { status, prediction, patient }.
+    final pred = data['prediction'] as Map<String, dynamic>?;
+    if (pred == null) return null; // profile exists but no photo analysed yet
+
+    final tissue = (pred['tissue_series'] as Map?) ?? const {};
     List<double> toD(dynamic l) =>
         (l as List?)?.map((e) => (e as num).toDouble()).toList() ?? const [];
     List<int> toI(dynamic l) =>
         (l as List?)?.map((e) => (e as num).toInt()).toList() ?? const [];
 
-    final trend = data['trend'] as String? ?? 'stable';
+    final enough = pred['enough_visits'] as bool? ?? true;
+    final trend = pred['trend'] as String? ?? 'stable';
     return HealingPrediction(
-      healingProbability: (data['healing_probability'] as num).toDouble(),
-      predictedLabel: data['predicted_label'] as String? ?? 'healing',
+      healingProbability: (pred['healing_probability'] as num?)?.toDouble() ?? 0.0,
+      predictedLabel: pred['predicted_label'] as String? ?? 'pending',
       topFactors: ['Overall trend: $trend'],
-      daySeries: toI(data['day_series']),
-      areaSeries: toI(data['area_series']),
+      daySeries: toI(pred['day_series']),
+      areaSeries: toI(pred['area_series']),
       granulation: toD(tissue['granulation']),
       slough: toD(tissue['slough']),
       necrosis: toD(tissue['necrosis']),
       isMock: false, // real data — the "Preview data" badge disappears
+      enoughVisits: enough,
+      visits: pred['visits'] as int? ?? 0,
     );
   }
 

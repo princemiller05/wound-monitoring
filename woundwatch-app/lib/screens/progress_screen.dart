@@ -243,6 +243,41 @@ class _PredictionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // #25 — with fewer than two real visits a healing score is meaningless.
+    if (!pred.enoughVisits) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Healing Prediction',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  const Icon(Icons.hourglass_empty,
+                      color: AppColors.healingWatch, size: 22),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text('Waiting for a second visit',
+                        style: TextStyle(
+                            fontSize: 17, fontWeight: FontWeight.w700)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'A healing trend needs at least two photos taken on different '
+                'days. Take another photo on your next check to see progress.',
+                style: TextStyle(color: AppColors.textMuted, height: 1.35),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     final pct = (pred.healingProbability * 100).round();
     Color color;
     String label;

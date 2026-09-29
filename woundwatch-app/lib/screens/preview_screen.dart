@@ -29,6 +29,7 @@ class PreviewScreen extends StatefulWidget {
 
 class _PreviewScreenState extends State<PreviewScreen> {
   double _pain = 0;
+  String? _location;
   final Set<String> _symptoms = {};
   final _notes = TextEditingController();
   bool _saving = false;
@@ -54,6 +55,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
       painLevel: _pain.round(),
       symptoms: _symptoms.toList(),
       notes: _notes.text.trim(),
+      woundLocation: _location,
     );
 
     // PHASE 1: saved in memory. PHASE 3: compress + upload to Azure here.
@@ -108,6 +110,25 @@ class _PreviewScreenState extends State<PreviewScreen> {
                     style: const TextStyle(color: AppColors.textMuted),
                   ),
                 ],
+              ),
+              const SizedBox(height: 24),
+
+              const Text('Wound location',
+                  style:
+                      TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                initialValue: _location,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  hintText: 'Where is this wound?',
+                  prefixIcon: Icon(Icons.place_outlined),
+                ),
+                items: kWoundLocations
+                    .map((loc) =>
+                        DropdownMenuItem(value: loc, child: Text(loc)))
+                    .toList(),
+                onChanged: (v) => setState(() => _location = v),
               ),
               const SizedBox(height: 24),
 

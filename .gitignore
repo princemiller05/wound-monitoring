@@ -36,3 +36,7 @@ venv/
 azure/sample-request.json
 sample_images/
 dashboard/.streamlit/secrets.toml
+# Firebase / mobile secrets (never commit)
+**/google-services.json
+**/GoogleService-Info.plist
+**/*firebase-adminsdk*.json

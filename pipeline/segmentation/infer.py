@@ -17,6 +17,7 @@ from pipeline.config import (
 from pipeline.schemas import SegmentationResult
 from .preprocess import load_image_rgb, resize_to_1024
 from .utils import postprocess_mask, extract_wound_crop, create_overlay, compute_area
+from .calibration import pixels_per_mm, area_mm2
 
 logger = logging.getLogger(__name__)
 
@@ -50,12 +51,18 @@ def segment_wound(img_rgb, yolo_model, sam_model, device,
     boxes = results[0].boxes
 
     if len(boxes) == 0:
-        # YOLO didn't find anything — fall back to centre crop.
+        # YOLO didn't find anything — fall back to the centre of the frame.
         # Flag this clearly so downstream callers know the result is unreliable.
         detection_failed = True
         logger.warning("  [seg] YOLO found no wound — falling back to centre crop. "
                        "Detection confidence set to 0.0.")
-        bbox = np.array([W // 4, H // 4, 3 * W // 4, 3 * H // 4])
+        # BUGFIX (#35): the prompt box must be in MedSAM's 1024x1024 space, NOT
+        # the original image size. Building it from W/H left the box far outside
+        # the 1024 frame on large photos, so MedSAM segmented almost everything
+        # (one case produced a mask over 90% of the image). Use the middle half
+        # of the 1024 frame directly — the same 25% region, correctly scaled.
+        q = SEG_INPUT_SIZE // 4
+        bbox = np.array([q, q, 3 * q, 3 * q], dtype=np.float32)
     else:
         # Pick the highest-confidence detection
         best = boxes[boxes.conf.argmax()]
@@ -127,6 +134,13 @@ def run_segmentation(image_path, yolo_model, sam_model, device,
     )
 
     area_px = compute_area(mask)
+
+    # #30 — detect the ArUco marker on the SAME 1024 image the mask uses, so the
+    # scale matches, and convert the pixel area into real mm² (None if no marker).
+    img_1024 = resize_to_1024(img_rgb)
+    ppm = pixels_per_mm(img_1024)
+    area_real_mm2 = area_mm2(area_px, ppm)
+
     mask_path = ""
     overlay_path = ""
     crop_path = ""
@@ -158,5 +172,7 @@ def run_segmentation(image_path, yolo_model, sam_model, device,
         bbox=bbox,
         yolo_conf=yolo_conf,
         detection_failed=detection_failed,
+        pixels_per_mm=ppm,
+        area_mm2=area_real_mm2,
         mask=mask,
     )

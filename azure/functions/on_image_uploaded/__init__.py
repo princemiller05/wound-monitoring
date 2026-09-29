@@ -115,27 +115,51 @@ def _trend(area_series):
 
 def main(blob: func.InputStream):
     patient_id, day_number, image_id, captured_ms = _parse_ids(blob.name)
+    blob_path = blob.name.split("wound-photos/", 1)[-1]
 
-    # 1) analyse this one photo
-    result = _call_ml(blob.read(), patient_id, image_id)
+    # 1) analyse this one photo.
+    #    #26 — if analysis fails, write analyzed:false with the error instead of
+    #    silently doing nothing (otherwise the app shows "analysing" forever).
+    try:
+        result = _call_ml(blob.read(), patient_id, image_id)
+    except Exception as exc:
+        db.collection("wound_photos").document(image_id).set({
+            "patient_id": patient_id,
+            "day_number": day_number,
+            "captured_ms": captured_ms,
+            "blob_path": blob_path,
+            "analyzed": False,
+            "error": str(exc),
+        }, merge=True)
+        raise  # let Azure log/retry it too
+
     seg = result["segmentation"]
     tis = result["tissue"]
     heal = result["healing"]
 
     # 2) save the per-photo result. Keyed by the unique image_id (which includes
     #    the timestamp), so every photo is its own record — no overwriting.
+    #    #24 — also save the quality flags the model already produced.
     db.collection("wound_photos").document(image_id).set({
         "patient_id": patient_id,
         "day_number": day_number,
         "captured_ms": captured_ms,
-        "blob_path": blob.name.split("wound-photos/", 1)[-1],
+        "blob_path": blob_path,
         "area_px": seg["area_px"],
+        "area_mm2": seg.get("area_mm2"),          # #30 real measurement (or None)
+        "pixels_per_mm": seg.get("pixels_per_mm"),
         "granulation_pct": tis["granulation_pct"],
         "slough_pct": tis["slough_pct"],
         "necrosis_pct": tis["necrosis_pct"],
         "healing_probability": heal["healing_probability"],
         "predicted_label": heal["predicted_label"],
+        # #24 quality flags
+        "detection_failed": seg.get("detection_failed", False),
+        "classifier_warning": tis.get("classifier_warning", ""),
+        "total_patches": tis.get("total_patches"),
+        "yolo_conf": seg.get("yolo_conf"),
         "analyzed": True,
+        "error": firestore.DELETE_FIELD,  # clear any earlier failure marker
     }, merge=True)
 
     # 3) gather every analysed photo for this patient
@@ -154,20 +178,33 @@ def main(blob: func.InputStream):
     rows = sorted(by_day.values(), key=lambda x: x["day_number"])
 
     area_series = [r["area_px"] for r in rows]
+    n_visits = len(rows)
 
-    # 4) build the summary the app + dashboard read, and store it on the patient
+    # 4) build the summary the app + dashboard read, and store it on the patient.
+    #    #25 — a healing score from a single photo is meaningless (it comes from
+    #    an artificial simulated shrink). Show "waiting for second visit" until
+    #    there are at least two real visits.
     latest = rows[-1]
+    enough = n_visits >= 2
     summary = {
-        "healing_probability": latest["healing_probability"],
-        "predicted_label": latest["predicted_label"],
-        "trend": _trend(area_series),
+        "visits": n_visits,
+        "enough_visits": enough,
+        "healing_probability": latest["healing_probability"] if enough else None,
+        "predicted_label": latest["predicted_label"] if enough else "pending",
+        "trend": _trend(area_series) if enough else "pending",
         "day_series": [r["day_number"] for r in rows],
         "area_series": area_series,
+        "area_mm2_series": [r.get("area_mm2") for r in rows],  # #30
+        # #55 — per-visit healing values so the dashboard graph isn't a flat line.
+        "healing_series": [r.get("healing_probability") for r in rows],
         "tissue_series": {
             "granulation": [r["granulation_pct"] for r in rows],
             "slough": [r["slough_pct"] for r in rows],
             "necrosis": [r["necrosis_pct"] for r in rows],
         },
+        # carry the latest photo's quality flags up to the summary (#48)
+        "last_detection_failed": latest.get("detection_failed", False),
+        "last_classifier_warning": latest.get("classifier_warning", ""),
         "updated_at": firestore.SERVER_TIMESTAMP,
     }
     db.collection("patients").document(patient_id).set(

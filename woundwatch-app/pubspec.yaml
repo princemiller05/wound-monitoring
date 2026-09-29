@@ -47,6 +47,10 @@ dependencies:
   # Charts for the progress dashboard.
   fl_chart: ^0.69.0
 
+  # Real authentication (#1) — replaces the mock login.
+  firebase_core: ^3.6.0
+  firebase_auth: ^5.3.1
+
   # HTTP calls to the Azure Functions (get upload URL, read history).
   http: ^1.2.2
 

@@ -49,18 +49,25 @@ class _SignupScreenState extends State<SignupScreen> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _loading = true);
-    await context.read<AuthProvider>().signUp(
-          fullName: _name.text.trim(),
-          email: _email.text.trim(),
-          password: _password.text,
-          dateOfBirth: _dob,
-          gender: _gender,
-        );
-    if (!mounted) return;
-    setState(() => _loading = false);
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const ProfileSetupScreen()),
-    );
+    try {
+      await context.read<AuthProvider>().signUp(
+            fullName: _name.text.trim(),
+            email: _email.text.trim(),
+            password: _password.text,
+            dateOfBirth: _dob,
+            gender: _gender,
+          );
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const ProfileSetupScreen()),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', ''))));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   @override

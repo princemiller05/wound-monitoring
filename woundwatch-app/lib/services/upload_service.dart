@@ -33,7 +33,8 @@ class UploadService {
     return result == null ? original : File(result.path);
   }
 
-  /// Upload one photo. Returns the blob path on success, or throws.
+  /// Upload one photo. Returns the **image_id** (the filename without .jpg,
+  /// which is also the Firestore record id) on success, or throws.
   ///
   /// [patientId] e.g. "CASE_001", [dayNumber] e.g. 7.
   static Future<String> uploadPhoto({
@@ -45,7 +46,8 @@ class UploadService {
     // The timestamp makes every photo its own record — nothing overwrites, and
     // multiple photos on the same day coexist with their true times.
     final ts = DateTime.now().millisecondsSinceEpoch;
-    final filename = '${patientId}_DAY${dayNumber}_$ts.jpg';
+    final imageId = '${patientId}_DAY${dayNumber}_$ts';
+    final filename = '$imageId.jpg';
 
     // 1) compress
     final compressed = await _compress(image);
@@ -77,6 +79,34 @@ class UploadService {
     }
 
     debugPrint('[upload] $blobPath uploaded (${bytes.length ~/ 1024} KB)');
-    return blobPath;
+    return imageId;
+  }
+
+  /// #16 — send the patient-reported pain level, symptoms and notes so they're
+  /// stored on the photo's record (the analysis is written separately by the
+  /// blob-trigger function; this merges into the same document).
+  static Future<void> saveVisitMeta({
+    required String imageId,
+    required String patientId,
+    required int painLevel,
+    required List<String> symptoms,
+    required String notes,
+    String? woundLocation,
+  }) async {
+    final resp = await http.post(
+      ApiConfig.url('save_visit_meta', const {}),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'image_id': imageId,
+        'patient_id': patientId,
+        'pain_level': painLevel,
+        'symptoms': symptoms,
+        'notes': notes,
+        'wound_location': woundLocation,
+      }),
+    );
+    if (resp.statusCode != 200) {
+      debugPrint('[save_visit_meta] failed ${resp.statusCode}');
+    }
   }
 }

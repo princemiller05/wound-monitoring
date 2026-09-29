@@ -1,5 +1,15 @@
 # Python dependencies for the WoundWatch Azure Functions.
 azure-functions
 requests
-firebase-admin
 azure-storage-blob
+
+# Firebase / Firestore.
+# IMPORTANT: pin the Firebase + Google stack to Protobuf 4.25-generated code.
+# The Azure Functions Python host bundles Protobuf runtime 5.29.x, and it
+# refuses to load code generated with a NEWER protoc (the unpinned firebase-admin
+# pulls Protobuf 6.x gencode -> VersionError at import, crashing every Firestore
+# function). Protobuf 4.25 gencode loads fine under the host's 5.29 runtime.
+firebase-admin==6.5.0
+google-cloud-firestore==2.16.1
+googleapis-common-protos==1.63.2
+protobuf==4.25.5

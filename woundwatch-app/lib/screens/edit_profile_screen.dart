@@ -1,9 +1,6 @@
-// Reached from the Profile tab. Pre-fills every field from the current patient,
-// lets them change anything, and saves it back to AuthProvider. Also holds the
-// log-out button (which clears the photo list too, so the next user starts
-// clean).
+// Edit the general health profile. Wound details live with each photo; doctors
+// are managed from the home screen.
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../models/patient.dart';
 import '../providers/auth_provider.dart';
@@ -22,11 +19,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _name;
   late TextEditingController _phone;
-  late TextEditingController _clinicianName;
-  late TextEditingController _clinicianEmail;
-  String? _woundLocation;
-  String? _diabetesType;
-  DateTime? _diagnosisDate;
+  late TextEditingController _height;
+  late TextEditingController _weight;
 
   @override
   void initState() {
@@ -34,31 +28,17 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     final p = context.read<AuthProvider>().patient!;
     _name = TextEditingController(text: p.fullName);
     _phone = TextEditingController(text: p.phone ?? '');
-    _clinicianName = TextEditingController(text: p.clinicianName ?? '');
-    _clinicianEmail = TextEditingController(text: p.clinicianEmail ?? '');
-    _woundLocation = p.woundLocation;
-    _diabetesType = p.diabetesType;
-    _diagnosisDate = p.diagnosisDate;
+    _height = TextEditingController(text: p.heightCm?.toString() ?? '');
+    _weight = TextEditingController(text: p.weightKg?.toString() ?? '');
   }
 
   @override
   void dispose() {
     _name.dispose();
     _phone.dispose();
-    _clinicianName.dispose();
-    _clinicianEmail.dispose();
+    _height.dispose();
+    _weight.dispose();
     super.dispose();
-  }
-
-  Future<void> _pickDate() async {
-    final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _diagnosisDate ?? now,
-      firstDate: DateTime(now.year - 10),
-      lastDate: now,
-    );
-    if (picked != null) setState(() => _diagnosisDate = picked);
   }
 
   Future<void> _save() async {
@@ -72,11 +52,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       dateOfBirth: old.dateOfBirth,
       gender: old.gender,
       phone: _phone.text.trim(),
-      clinicianName: _clinicianName.text.trim(),
-      clinicianEmail: _clinicianEmail.text.trim(),
-      woundLocation: _woundLocation,
-      diagnosisDate: _diagnosisDate,
-      diabetesType: _diabetesType,
+      heightCm: double.tryParse(_height.text.trim()),
+      weightKg: double.tryParse(_weight.text.trim()),
+      doctorEmails: old.doctorEmails,
     );
     await auth.updateProfile(updated);
     if (!mounted) return;
@@ -120,54 +98,28 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   decoration: const InputDecoration(labelText: 'Phone number'),
                 ),
                 const SizedBox(height: 14),
-                TextFormField(
-                  controller: _clinicianName,
-                  decoration:
-                      const InputDecoration(labelText: 'Clinician name'),
-                ),
-                const SizedBox(height: 14),
-                TextFormField(
-                  controller: _clinicianEmail,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration:
-                      const InputDecoration(labelText: 'Clinician email'),
-                ),
-                const SizedBox(height: 14),
-                DropdownButtonFormField<String>(
-                  initialValue: _woundLocation,
-                  decoration:
-                      const InputDecoration(labelText: 'Wound location'),
-                  items: kWoundLocations
-                      .map((g) =>
-                          DropdownMenuItem(value: g, child: Text(g)))
-                      .toList(),
-                  onChanged: (v) => setState(() => _woundLocation = v),
-                ),
-                const SizedBox(height: 14),
-                InkWell(
-                  onTap: _pickDate,
-                  child: InputDecorator(
-                    decoration:
-                        const InputDecoration(labelText: 'Diagnosis date'),
-                    child: Text(
-                      _diagnosisDate == null
-                          ? 'Select date'
-                          : DateFormat('d MMM yyyy').format(_diagnosisDate!),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: _height,
+                        keyboardType: TextInputType.number,
+                        decoration:
+                            const InputDecoration(labelText: 'Height (cm)'),
+                      ),
                     ),
-                  ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextFormField(
+                        controller: _weight,
+                        keyboardType: TextInputType.number,
+                        decoration:
+                            const InputDecoration(labelText: 'Weight (kg)'),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 14),
-                DropdownButtonFormField<String>(
-                  initialValue: _diabetesType,
-                  decoration:
-                      const InputDecoration(labelText: 'Diabetes type'),
-                  items: kDiabetesTypes
-                      .map((g) =>
-                          DropdownMenuItem(value: g, child: Text(g)))
-                      .toList(),
-                  onChanged: (v) => setState(() => _diabetesType = v),
-                ),
-                const SizedBox(height: 28),
+                const SizedBox(height: 20),
                 ElevatedButton(
                   onPressed: _save,
                   child: const Text('Save Changes'),

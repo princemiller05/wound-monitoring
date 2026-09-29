@@ -56,6 +56,13 @@ SEG_THRESHOLD     = 0.5    # probability cutoff to binarize the mask
 YOLO_CONF         = 0.25   # YOLO confidence threshold (lower = more detections)
 BBOX_PAD          = 30     # extra padding around YOLO bbox before passing to MedSAM
 
+# ─── Marker Calibration Settings (item #30) ─────────────────────
+# A printed ArUco marker of known physical size is placed beside the wound.
+# Detecting it gives pixels-per-mm, which turns the pixel count into real mm²
+# — a measurement that no longer changes when the phone is held closer/farther.
+ARUCO_DICT_NAME   = "DICT_4X4_50"  # which ArUco dictionary the printed marker uses
+ARUCO_MARKER_MM   = 20.0           # side length of the printed marker, in millimetres
+
 # ─── Tissue Classification Settings ─────────────────────────────
 TISSUE_PATCH_SIZE = 64     # size of each patch we classify
 TISSUE_STEP       = 32     # stride of the sliding window (smaller = slower but denser)

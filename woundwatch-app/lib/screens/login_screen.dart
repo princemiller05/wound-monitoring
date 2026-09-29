@@ -48,7 +48,8 @@ class _LoginScreenState extends State<LoginScreen> {
         (route) => false,
       );
     } catch (e) {
-      setState(() => _error = 'Could not log in. Please try again.');
+      // Show the real reason (e.g. "Incorrect email or password.").
+      setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
