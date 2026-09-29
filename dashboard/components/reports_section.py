@@ -11,7 +11,7 @@ from utils.helpers import df_to_csv_bytes
 
 
 def render_reports_section(roster, patient: dict, timeseries) -> None:
-    st.markdown('<div class="card">', unsafe_allow_html=True)
+    
     st.markdown('<div class="section-title">📄 Reports & Export</div>',
                 unsafe_allow_html=True)
 
@@ -51,4 +51,4 @@ def render_reports_section(roster, patient: dict, timeseries) -> None:
     st.markdown('<div class="info-label">Visit-Level Data (current patient)</div>',
                 unsafe_allow_html=True)
     st.dataframe(timeseries, use_container_width=True, hide_index=True)
-    st.markdown("</div>", unsafe_allow_html=True)
+    

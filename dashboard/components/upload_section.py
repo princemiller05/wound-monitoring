@@ -66,7 +66,7 @@ def render_upload_section() -> None:
             st.success(f"✅ Analysis complete for {len(files)} image(s) — {day}")
             _render_analysis_result(day)
 
-    st.markdown("</div>", unsafe_allow_html=True)
+    
 
 
 def _render_analysis_result(day: str) -> None:
@@ -76,7 +76,7 @@ def _render_analysis_result(day: str) -> None:
     status = "Healing" if prob >= 70 else ("Stable" if prob >= 45 else "Non-Healing")
     reasons = generate_reasons(status)
 
-    st.markdown('<div class="card" style="margin-top:14px;">', unsafe_allow_html=True)
+    
     st.markdown(
         f'<div class="section-title">📊 AI Analysis Result — {day}</div>',
         unsafe_allow_html=True,
@@ -97,4 +97,4 @@ def _render_analysis_result(day: str) -> None:
         file_name=f"wound_analysis_{day.replace(' ', '_').lower()}.txt",
         mime="text/plain",
     )
-    st.markdown("</div>", unsafe_allow_html=True)
+    

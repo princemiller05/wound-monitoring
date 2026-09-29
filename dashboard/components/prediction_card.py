@@ -57,7 +57,7 @@ def render_prediction_card(patient: dict) -> None:
         st.markdown("</div>", unsafe_allow_html=True)
         return
 
-    st.markdown('<div class="card">', unsafe_allow_html=True)
+    
     st.markdown(
         '<div class="section-title">🧠 AI Healing Prediction</div>',
         unsafe_allow_html=True,
@@ -90,4 +90,4 @@ def render_prediction_card(patient: dict) -> None:
         )
 
     
-    st.markdown("</div>", unsafe_allow_html=True)
+    

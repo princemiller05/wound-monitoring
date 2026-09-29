@@ -10,7 +10,7 @@ import streamlit as st
 
 
 def render_settings_section() -> None:
-    st.markdown('<div class="card">', unsafe_allow_html=True)
+    
     st.markdown('<div class="section-title">⚙️ Application Settings</div>',
                 unsafe_allow_html=True)
 
@@ -38,4 +38,4 @@ def render_settings_section() -> None:
 
     st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
     st.button("💾 Save Settings")
-    st.markdown("</div>", unsafe_allow_html=True)
+    

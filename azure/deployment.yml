@@ -29,7 +29,10 @@ liveness_probe:
   failure_threshold: 30
 
 request_settings:
-  # #34 — raise timeout (cold model load + inference) and allow 2 concurrent.
+  # #34 — raised timeout for cold model load + inference. Concurrency stays at 1
+  # per instance (avoids per-instance OOM on the heavy MedSAM model); with
+  # instance_count: 2, two photos arriving together are still handled in parallel
+  # (one per instance). Generous queue wait so bursts aren't dropped.
   request_timeout_ms: 180000
-  max_concurrent_requests_per_instance: 2
+  max_concurrent_requests_per_instance: 1
   max_queue_wait_ms: 10000

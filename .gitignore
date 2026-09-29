@@ -40,3 +40,24 @@ dashboard/.streamlit/secrets.toml
 **/google-services.json
 **/GoogleService-Info.plist
 **/*firebase-adminsdk*.json
+
+venv-pipeline/
+
+# Research/measurement data (contains real patient photographs - never commit)
+cohort/
+measure/out/
+Wound_images/
+
+# IEEE paper methodology - kept local only, not in repo
+measure/
+
+# Service account keys (never commit)
+firebase-key.json
+*-firebase-adminsdk-*.json
+
+# Renamed cohort backup (real patient photographs - never commit)
+cohort_OLD_with_amputation/
+
+# Stray test outputs at repo root
+CASE_001_DAY0_overlay.png
+segment1.png
