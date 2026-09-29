@@ -18,9 +18,19 @@ import pandas as pd
 import requests
 import streamlit as st
 
-# #59 — empty by default; set via environment so no live host is hardcoded.
-FUNCTION_BASE_URL = os.getenv("WOUNDWATCH_FUNCTION_URL", "")
-FUNCTION_KEY = os.getenv("WOUNDWATCH_FUNCTION_KEY", "")
+# #59 — read from Streamlit secrets first, then environment. Never hardcoded, so
+# no live host/key is baked into the repo.
+def _cfg(name: str) -> str:
+    try:
+        if name in st.secrets:
+            return str(st.secrets[name])
+    except Exception:
+        pass
+    return os.getenv(name, "")
+
+
+FUNCTION_BASE_URL = _cfg("WOUNDWATCH_FUNCTION_URL")
+FUNCTION_KEY = _cfg("WOUNDWATCH_FUNCTION_KEY")
 
 STATUS_MAP = {
     "healing": "Healing",
@@ -43,6 +53,26 @@ def _call(path: str, params: dict) -> dict:
     )
     resp.raise_for_status()
     return resp.json()
+
+
+def _post(path: str, body: dict) -> dict:
+    if not FUNCTION_BASE_URL or not FUNCTION_KEY:
+        raise RuntimeError("WOUNDWATCH_FUNCTION_URL / _KEY not configured.")
+    resp = requests.post(
+        f"{FUNCTION_BASE_URL}/{path}",
+        json=body,
+        headers={"x-functions-key": FUNCTION_KEY},
+        timeout=30,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+def mark_reviewed(patient_id: str, doctor_email: str, undo: bool = False) -> dict:
+    """Mark reviewed up to the newest photo, or undo (undo=True → needs review)."""
+    return _post("mark_reviewed",
+                 {"patient_id": patient_id, "doctor_email": doctor_email,
+                  "undo": undo})
 
 
 @st.cache_data(ttl=60, show_spinner=False)
@@ -123,6 +153,9 @@ def build_patient_overlay(patient_id: str, roster=None) -> tuple[dict, dict]:
         "age": p.get("age", "—"),
         "gender": p.get("sex", "—"),
         "bmi": p.get("bmi", "—"),
+        "height_cm": p.get("height_cm"),
+        "weight_kg": p.get("weight_kg"),
+        "phone": p.get("phone"),
         # General wound monitor: no diabetes/prior-ulcer registration field.
         "diabetes_type": "—",
         "wound_duration_days": p.get("wound_duration_days"),

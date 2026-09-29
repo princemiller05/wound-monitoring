@@ -15,6 +15,7 @@ App settings needed: FIREBASE_CREDENTIALS.
 import datetime
 import json
 import os
+import re
 
 import azure.functions as func
 import firebase_admin
@@ -59,12 +60,25 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
            .where("profile.clinician_emails", "array_contains", doctor_email)
            .stream())
 
+    email_key = re.sub(r"[^a-z0-9]", "_", doctor_email)
+
     patients = []
     for doc in q:
         d = doc.to_dict()
         profile = d.get("profile", {})
         pred = d.get("latest_prediction")
         rank, risk_label = _risk(pred)
+
+        # Needs review = the patient has a photo newer than this doctor's last
+        # review. A brand-new patient with photos is "needs review" too.
+        latest_photo_ms = (pred or {}).get("latest_photo_ms", 0) or 0
+        reviewed_ms = (d.get("reviews") or {}).get(email_key, 0) or 0
+        visits = pred.get("visits", 0) if pred else 0
+        # Never reviewed but has data -> needs review. Otherwise, a photo newer
+        # than the last review -> needs review again.
+        never_reviewed = reviewed_ms == 0 and visits > 0
+        needs_review = never_reviewed or (latest_photo_ms > reviewed_ms)
+
         patients.append({
             "patient_id": doc.id,
             "name": profile.get("full_name"),
@@ -75,10 +89,14 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
             "trend": pred.get("trend") if pred else None,
             "visits": pred.get("visits", 0) if pred else 0,
             "updated_at": pred.get("updated_at") if pred else None,
+            "latest_photo_ms": latest_photo_ms,
+            "reviewed_ms": reviewed_ms,
+            "needs_review": needs_review,
         })
 
-    # Worst first.
-    patients.sort(key=lambda p: p["risk_rank"], reverse=True)
+    # Needs-review first, then worst risk.
+    patients.sort(key=lambda p: (p["needs_review"], p["risk_rank"]),
+                  reverse=True)
 
     return func.HttpResponse(
         json.dumps({"patients": patients}, default=str),

@@ -30,6 +30,7 @@ import base64
 import json
 import os
 import re
+import time
 
 import requests
 import azure.functions as func
@@ -78,7 +79,12 @@ def _parse_ids(blob_name: str):
 
 
 def _call_ml(image_bytes: bytes, case_id: str, image_id: str) -> dict:
-    """Send the photo to the ML endpoint (base64) and return its `result`."""
+    """Send the photo to the ML endpoint (base64) and return its `result`.
+
+    The managed endpoint can cold-start or hiccup, which used to drop the photo
+    from the trend entirely. Retry a few times before giving up so transient
+    failures recover on their own.
+    """
     payload = {
         "image_base64": base64.b64encode(image_bytes).decode("utf-8"),
         "case_id": case_id,
@@ -87,18 +93,26 @@ def _call_ml(image_bytes: bytes, case_id: str, image_id: str) -> dict:
         "seed": 42,
         "save": False,
     }
-    r = requests.post(
-        ML_URI,
-        data=json.dumps(payload),
-        headers={"Authorization": "Bearer " + ML_KEY,
-                 "Content-Type": "application/json"},
-        timeout=180,
-    )
-    r.raise_for_status()
-    body = r.json()
-    if body.get("status") != "success":
-        raise RuntimeError(f"Endpoint error: {body}")
-    return body["result"]
+    last_err = None
+    for attempt in range(3):
+        try:
+            r = requests.post(
+                ML_URI,
+                data=json.dumps(payload),
+                headers={"Authorization": "Bearer " + ML_KEY,
+                         "Content-Type": "application/json"},
+                timeout=180,
+            )
+            r.raise_for_status()
+            body = r.json()
+            if body.get("status") != "success":
+                raise RuntimeError(f"Endpoint error: {body}")
+            return body["result"]
+        except Exception as exc:
+            last_err = exc
+            if attempt < 2:
+                time.sleep(5 * (attempt + 1))  # 5s, then 10s — let a cold start warm up
+    raise last_err
 
 
 def _trend(area_series):
@@ -186,9 +200,13 @@ def main(blob: func.InputStream):
     #    there are at least two real visits.
     latest = rows[-1]
     enough = n_visits >= 2
+    # Newest capture time across ALL photos (not just the per-day trend) — the
+    # dashboard uses this to flag "new since last review".
+    latest_photo_ms = max((r.get("captured_ms", 0) for r in all_rows), default=0)
     summary = {
         "visits": n_visits,
         "enough_visits": enough,
+        "latest_photo_ms": latest_photo_ms,
         "healing_probability": latest["healing_probability"] if enough else None,
         "predicted_label": latest["predicted_label"] if enough else "pending",
         "trend": _trend(area_series) if enough else "pending",

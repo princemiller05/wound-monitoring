@@ -49,19 +49,15 @@ def render_prediction_card(patient: dict) -> None:
     # #54 — with fewer than two visits a healing score is meaningless. Say so
     # clearly instead of showing a number (prob is None in this case).
     if not patient.get("enough_visits", True) or prob is None:
-        st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.markdown('<div class="section-title">🧠 AI Healing Prediction</div>',
+        st.markdown('<div class="section-title">Healing prediction</div>',
                     unsafe_allow_html=True)
         st.info("Waiting for a second visit — a healing trend needs at least "
                 "two photos taken on different days.")
-        st.markdown("</div>", unsafe_allow_html=True)
         return
 
     
-    st.markdown(
-        '<div class="section-title">🧠 AI Healing Prediction</div>',
-        unsafe_allow_html=True,
-    )
+    st.markdown('<div class="section-title">Healing prediction</div>',
+                unsafe_allow_html=True)
 
     g_col, info_col = st.columns([1, 1.4])
     with g_col:

@@ -43,10 +43,10 @@ def wound_area_trend(df, unit_label="cm²", unit_col="wound_area_cm2") -> go.Fig
         hovertemplate=f"<b>%{{x}}</b><br>Wound Area: %{{y}} {unit_label}<extra></extra>",
         name="Wound Area",
     ))
-    fig.update_layout(**LAYOUT_DEFAULTS, height=320,
+    fig.update_layout(**LAYOUT_DEFAULTS, height=320, dragmode=False,
                        title=f"Wound Area Trend ({unit_label})")
-    fig.update_xaxes(**GRID_STYLE)
-    fig.update_yaxes(**GRID_STYLE, title=f"Area ({unit_label})")
+    fig.update_xaxes(**GRID_STYLE, type="category", fixedrange=True)
+    fig.update_yaxes(**GRID_STYLE, title=f"Area ({unit_label})", fixedrange=True)
     return fig
 
 
@@ -64,9 +64,10 @@ def tissue_composition(df) -> go.Figure:
             hovertemplate=f"<b>%{{x}}</b><br>{name}: %{{y}}%<extra></extra>",
         ))
     fig.update_layout(**LAYOUT_DEFAULTS, barmode="stack", height=320,
-                       title="Tissue Composition (%)")
-    fig.update_xaxes(**GRID_STYLE)
-    fig.update_yaxes(**GRID_STYLE, title="% of Wound Bed", range=[0, 100])
+                       dragmode=False, title="Tissue Composition (%)")
+    fig.update_xaxes(**GRID_STYLE, type="category", fixedrange=True)
+    fig.update_yaxes(**GRID_STYLE, title="% of Wound Bed", range=[0, 100],
+                     fixedrange=True)
     return fig
 
 
@@ -142,18 +143,21 @@ def weekly_progress(df) -> go.Figure:
 
 
 def render_chart_grid(df) -> None:
-    """Render the essential chart grid for a patient: wound area trend and
-    tissue composition side by side, with healing probability full-width below."""
-    unit_col = "wound_area_px" if "wound_area_px" in df.columns else "wound_area_cm2"
-    unit_label = "px²" if unit_col == "wound_area_px" else "cm²"
+    """Wound area trend + tissue composition side by side. (Healing-probability
+    chart removed on request.) Zoom/pan disabled so the view can't get stuck."""
+    # Prefer real mm² measurements when available, else pixel area.
+    if "wound_area_mm2" in df.columns and df["wound_area_mm2"].notna().any():
+        unit_col, unit_label = "wound_area_mm2", "mm²"
+    elif "wound_area_px" in df.columns:
+        unit_col, unit_label = "wound_area_px", "px"
+    else:
+        unit_col, unit_label = "wound_area_cm2", "cm²"
 
+    cfg = {"displayModeBar": False, "staticPlot": False, "scrollZoom": False}
     c1, c2 = st.columns(2)
     with c1:
-        st.plotly_chart(wound_area_trend(df, unit_label, unit_col), use_container_width=True,
-                         config={"displayModeBar": False})
+        st.plotly_chart(wound_area_trend(df, unit_label, unit_col),
+                        use_container_width=True, config=cfg)
     with c2:
-        st.plotly_chart(tissue_composition(df), use_container_width=True,
-                         config={"displayModeBar": False})
-
-    st.plotly_chart(healing_probability_over_time(df), use_container_width=True,
-                     config={"displayModeBar": False})
+        st.plotly_chart(tissue_composition(df),
+                        use_container_width=True, config=cfg)
