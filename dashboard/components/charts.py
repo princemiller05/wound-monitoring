@@ -8,12 +8,13 @@ defined once and reused consistently across pages.
 import plotly.graph_objects as go
 import streamlit as st
 
-PRIMARY = "#1565C0"
-ACCENT = "#00ACC1"
-SUCCESS = "#16A34A"
-WARNING = "#F59E0B"
-DANGER = "#DC2626"
-INK_SOFT = "#5C7184"
+# Clinical teal to match the WoundWatch app.
+PRIMARY = "#0E7361"
+ACCENT = "#0FA891"
+SUCCESS = "#0E7361"
+WARNING = "#B4830B"
+DANGER = "#C0483F"
+INK_SOFT = "#5F6E69"
 
 LAYOUT_DEFAULTS = dict(
     paper_bgcolor="rgba(0,0,0,0)",

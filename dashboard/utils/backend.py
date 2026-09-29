@@ -64,6 +64,18 @@ def get_doctor_patients(doctor_email: str) -> list:
         "patients", [])
 
 
+@st.cache_data(ttl=60, show_spinner=False)
+def get_patient_photos(patient_id: str) -> list:
+    """The patient's analysed wound photos, each with a short-lived image URL."""
+    return _call("get_patient_photos", {"patient_id": patient_id}).get(
+        "photos", [])
+
+
+def backend_configured() -> bool:
+    """True when the Azure Function URL + key are set (else we're in demo mode)."""
+    return bool(FUNCTION_BASE_URL and FUNCTION_KEY)
+
+
 def history_to_dataframe(history: dict) -> pd.DataFrame:
     """Chart-ready frame. #55 uses per-visit healing; #30 carries mm²."""
     pred = history.get("prediction", {}) or {}

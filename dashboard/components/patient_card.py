@@ -17,6 +17,14 @@ def render_patient_card(patient: dict) -> None:
         unsafe_allow_html=True,
     )
 
+    def _v(val, suffix=""):
+        if val is None or val == "" or val == "—":
+            return "—"
+        return f"{val}{suffix}"
+
+    smoker = patient.get("smoker")
+    smoker_txt = "—" if smoker is None else ("Yes" if smoker else "No")
+
     col_avatar, col_info = st.columns([1, 3])
     with col_avatar:
         st.markdown(
@@ -27,8 +35,9 @@ def render_patient_card(patient: dict) -> None:
         st.markdown(f'<div class="patient-name">{patient["name"]}</div>',
                     unsafe_allow_html=True)
         st.markdown(
-            f'<div class="patient-meta">Case ID: {patient["case_id"]} &nbsp;•&nbsp; '
-            f'{patient["age"]} yrs &nbsp;•&nbsp; {patient["gender"]}</div>',
+            f'<div class="patient-meta">{_v(patient.get("age"))} yrs '
+            f'&nbsp;•&nbsp; {_v(patient.get("gender"))} '
+            f'&nbsp;•&nbsp; {_v(patient.get("visits"))} visit(s)</div>',
             unsafe_allow_html=True,
         )
         b1, b2 = st.columns(2)
@@ -48,14 +57,14 @@ def render_patient_card(patient: dict) -> None:
     st.markdown(
         f"""
         <div class="info-grid">
-            <div class="info-item"><div class="info-label">Diabetes</div>
-                <div class="info-value">{patient['diabetes_type']}</div></div>
-            <div class="info-item"><div class="info-label">Attending Doctor</div>
-                <div class="info-value">{patient['doctor']}</div></div>
-            <div class="info-item"><div class="info-label">Last Visit</div>
-                <div class="info-value">{patient['last_visit']}</div></div>
-            <div class="info-item"><div class="info-label">Current Stage</div>
-                <div class="info-value">{patient['stage']}</div></div>
+            <div class="info-item"><div class="info-label">BMI</div>
+                <div class="info-value">{_v(patient.get('bmi'))}</div></div>
+            <div class="info-item"><div class="info-label">Smoker</div>
+                <div class="info-value">{smoker_txt}</div></div>
+            <div class="info-item"><div class="info-label">Visits recorded</div>
+                <div class="info-value">{_v(patient.get('visits'))}</div></div>
+            <div class="info-item"><div class="info-label">Shared with</div>
+                <div class="info-value">{_v(patient.get('doctor_email'))}</div></div>
         </div>
         """,
         unsafe_allow_html=True,
