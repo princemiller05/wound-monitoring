@@ -18,8 +18,9 @@ import pandas as pd
 import requests
 import streamlit as st
 
-# #59 — read from Streamlit secrets first, then environment. Never hardcoded, so
-# no live host/key is baked into the repo.
+# #59 — read from Streamlit secrets first, then environment, EACH CALL (not once
+# at import) so secrets added after the app first loads are picked up. Never
+# hardcoded, so no live host/key is baked into the repo.
 def _cfg(name: str) -> str:
     try:
         if name in st.secrets:
@@ -29,8 +30,12 @@ def _cfg(name: str) -> str:
     return os.getenv(name, "")
 
 
-FUNCTION_BASE_URL = _cfg("WOUNDWATCH_FUNCTION_URL")
-FUNCTION_KEY = _cfg("WOUNDWATCH_FUNCTION_KEY")
+def _base_url() -> str:
+    return _cfg("WOUNDWATCH_FUNCTION_URL")
+
+
+def _key() -> str:
+    return _cfg("WOUNDWATCH_FUNCTION_KEY")
 
 STATUS_MAP = {
     "healing": "Healing",
@@ -43,12 +48,13 @@ RISK_MAP = {"Healing": "Low", "Stable": "Medium",
 
 
 def _call(path: str, params: dict) -> dict:
-    if not FUNCTION_BASE_URL or not FUNCTION_KEY:
+    base, key = _base_url(), _key()
+    if not base or not key:
         raise RuntimeError("WOUNDWATCH_FUNCTION_URL / _KEY not configured.")
     resp = requests.get(
-        f"{FUNCTION_BASE_URL}/{path}",
+        f"{base}/{path}",
         params=params,
-        headers={"x-functions-key": FUNCTION_KEY},  # #59 — key in header
+        headers={"x-functions-key": key},  # #59 — key in header
         timeout=30,
     )
     resp.raise_for_status()
@@ -56,12 +62,13 @@ def _call(path: str, params: dict) -> dict:
 
 
 def _post(path: str, body: dict) -> dict:
-    if not FUNCTION_BASE_URL or not FUNCTION_KEY:
+    base, key = _base_url(), _key()
+    if not base or not key:
         raise RuntimeError("WOUNDWATCH_FUNCTION_URL / _KEY not configured.")
     resp = requests.post(
-        f"{FUNCTION_BASE_URL}/{path}",
+        f"{base}/{path}",
         json=body,
-        headers={"x-functions-key": FUNCTION_KEY},
+        headers={"x-functions-key": key},
         timeout=30,
     )
     resp.raise_for_status()
@@ -103,7 +110,7 @@ def get_patient_photos(patient_id: str) -> list:
 
 def backend_configured() -> bool:
     """True when the Azure Function URL + key are set (else we're in demo mode)."""
-    return bool(FUNCTION_BASE_URL and FUNCTION_KEY)
+    return bool(_base_url() and _key())
 
 
 def history_to_dataframe(history: dict) -> pd.DataFrame:
