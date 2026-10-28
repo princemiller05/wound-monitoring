@@ -109,4 +109,22 @@ class UploadService {
       debugPrint('[save_visit_meta] failed ${resp.statusCode}');
     }
   }
+
+  /// Delete one uploaded photo (blob + record) and let the backend recompute the
+  /// patient's metrics. Returns true on success.
+  static Future<bool> deletePhoto({
+    required String imageId,
+    required String patientId,
+  }) async {
+    final resp = await http.post(
+      ApiConfig.url('delete_photo', const {}),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'image_id': imageId, 'patient_id': patientId}),
+    );
+    if (resp.statusCode != 200) {
+      debugPrint('[delete_photo] failed ${resp.statusCode}: ${resp.body}');
+      return false;
+    }
+    return true;
+  }
 }

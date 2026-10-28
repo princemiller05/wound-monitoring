@@ -24,6 +24,10 @@ class PhotosProvider extends ChangeNotifier {
   bool _loading = false;
   String? _status; // e.g. "Analysing…" or an error message
 
+  /// Perceptual hash of the most recent capture — used to warn when a new photo
+  /// is essentially identical to the last one (accidental re-upload).
+  String? lastCaptureHash;
+
   List<WoundPhoto> get photos => List.unmodifiable(_photos);
   HealingPrediction? get prediction => _prediction;
   bool get isLoading => _loading;
@@ -154,6 +158,70 @@ class PhotosProvider extends ChangeNotifier {
       _status = 'Import failed: $e';
       _loading = false;
       notifyListeners();
+    }
+  }
+
+  /// Load this patient's photos back from the cloud so they survive reopening
+  /// (or reinstalling) the app. Replaces the in-memory list with the backend's
+  /// truth; freshly-captured photos this session are re-added by [addPhoto].
+  Future<void> loadFromBackend(String patientId) async {
+    if (!ApiConfig.useRealBackend) return;
+    try {
+      final resp = await http.get(
+        ApiConfig.url('get_patient_photos', {'patient_id': patientId}),
+      );
+      if (resp.statusCode != 200) return;
+      final data = jsonDecode(resp.body) as Map<String, dynamic>;
+      final list = (data['photos'] as List?) ?? const [];
+      final loaded = <WoundPhoto>[];
+      for (final raw in list) {
+        final r = raw as Map<String, dynamic>;
+        loaded.add(WoundPhoto(
+          id: r['image_id'] as String? ?? '',
+          patientId: patientId,
+          localPath: '',
+          remoteUrl: r['download_url'] as String?,
+          timestamp: DateTime.fromMillisecondsSinceEpoch(
+              (r['captured_ms'] as num?)?.toInt() ?? 0),
+          dayNumber: (r['day_number'] as num?)?.toInt() ?? 0,
+          painLevel: (r['pain_level'] as num?)?.toInt() ?? 0,
+          symptoms: (r['symptoms'] as List?)?.cast<String>() ?? const [],
+          notes: r['notes'] as String? ?? '',
+          woundLocation: r['wound_location'] as String?,
+        ));
+      }
+      if (loaded.isNotEmpty) {
+        _photos
+          ..clear()
+          ..addAll(loaded);
+        notifyListeners();
+      }
+    } catch (_) {
+      // best-effort — keep whatever's already shown
+    }
+  }
+
+  /// Delete a photo everywhere (blob + record) and refresh metrics + list.
+  /// Returns true on success. Works for cloud photos (have a real image_id).
+  Future<bool> deletePhoto(WoundPhoto photo) async {
+    // Remove from the local list immediately for a responsive UI.
+    _photos.removeWhere((p) => p.id == photo.id);
+    notifyListeners();
+
+    if (!ApiConfig.useRealBackend) return true;
+    try {
+      final ok = await UploadService.deletePhoto(
+        imageId: photo.id,
+        patientId: photo.patientId,
+      );
+      // Re-sync from the backend so metrics + remaining photos are correct.
+      await loadFromBackend(photo.patientId);
+      await refreshPrediction(photo.patientId);
+      return ok;
+    } catch (e) {
+      _status = 'Could not delete: $e';
+      notifyListeners();
+      return false;
     }
   }
 

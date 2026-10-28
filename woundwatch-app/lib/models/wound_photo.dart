@@ -16,6 +16,10 @@ class WoundPhoto {
   /// registration) — a general wound monitor doesn't assume one fixed site.
   final String? woundLocation;
 
+  /// Cloud image URL (set when loaded back from the backend). When [localPath]
+  /// is empty we display this instead, so photos survive reopening the app.
+  final String? remoteUrl;
+
   WoundPhoto({
     required this.id,
     required this.patientId,
@@ -26,6 +30,7 @@ class WoundPhoto {
     this.symptoms = const [],
     this.notes = '',
     this.woundLocation,
+    this.remoteUrl,
   });
 
   Map<String, dynamic> toMap() => {

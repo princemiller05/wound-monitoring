@@ -57,6 +57,12 @@ dependencies:
   # Compress photos before uploading (raw phone photos are 5-10 MB).
   flutter_image_compress: ^2.3.0
 
+  # Pixel access for the on-device quality check (blur + lighting) at capture.
+  image: ^4.2.0
+
+  # Motion sensors for the hold-steady indicator at capture.
+  sensors_plus: ^5.0.1
+
   # Temp directory for the compressed file.
   path_provider: ^2.1.4
 

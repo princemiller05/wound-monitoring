@@ -4,7 +4,7 @@
 
 > **Disclaimer — research prototype, not for clinical use.** This is a university group project. It is **not** intended for clinical decision-making. The healing prediction comes from a small model trained on synthetic wound progression and is **not calibrated**. Do not use this system to make medical decisions.
 
-Wound Monitoring is an end-to-end system for tracking **Diabetic Foot Ulcers (DFUs)** from photographs over time. It segments the wound, classifies the tissue, and estimates whether the wound is **healing or worsening** across visits. Patients capture photos in the **WoundWatch** mobile app; a cloud pipeline analyses each upload automatically; and a doctor reviews each patient's progress on a web dashboard.
+Wound Monitoring is an end-to-end system for tracking **wounds of any type** from photographs over time. (It was first built around Diabetic Foot Ulcers, and the segmentation detector is still DFU-trained, but the app, data model, and dashboard are general — wound location is recorded per photo rather than assumed.) It segments the wound, classifies the tissue, and estimates whether the wound is **healing or worsening** across visits. Patients capture photos in the **WoundWatch** mobile app; a cloud pipeline analyses each upload automatically; and a doctor reviews each patient's progress on a web dashboard.
 
 > **Project vs app name:** the **project** is *Wound Monitoring*; the patient **mobile app** is *WoundWatch*. "WoundWatch" only ever refers to the app.
 
@@ -30,6 +30,22 @@ Give it a series of wound photos taken on different days. Get back:
 3. **A healing estimate** — a probability and a plain `improving / worsening / stable` trend across the visits
 
 All intermediate images (masks, overlays, tissue maps, trend plots) are saved so you can see what each step is doing.
+
+---
+
+## The WoundWatch app (patient side)
+
+A Flutter app with **real Firebase email/password accounts**. Registration collects only general health details (phone, height, weight); wound location is chosen **per photo** at upload (any body site), and patients add one or more **doctors by email** from the home screen to share their history.
+
+**On-device photo quality gate** — before a photo is accepted it is checked locally (no cloud round-trip) and the patient is asked to retake if it fails:
+
+- **Blur** — variance of the Laplacian (sharp photos have strong edges).
+- **Lighting** — mean brightness (too dark / washed out) and a glare check (clustered near-white pixels).
+- **Empty / low-res frame** — rejects blank or too-small images.
+- **Duplicate** — a perceptual hash (dHash) flags a photo that is essentially identical to the last upload.
+- **Hold-steady** — an accelerometer indicator only enables the shutter when the phone is still, to prevent motion blur at the source.
+
+Photos are uploaded straight to Blob Storage via a short-lived signed URL, **survive reinstalling the app** (reloaded from the cloud), and can be **deleted** by the patient (which also recomputes their healing metrics).
 
 ---
 
@@ -68,6 +84,20 @@ READ PATH  (instant; nothing is recomputed)
 ```
 
 **Many patients at once:** each patient has their own Blob folder and Firestore documents, so data never mixes. The Azure ML endpoint **autoscales** (min 2 / max 6 instances) and uploads are independent events, so ~10 apps uploading together queue and drain rather than fail.
+
+---
+
+## The doctor dashboard (Streamlit)
+
+A doctor **signs in with their own email/password** (same Firebase auth as the app). They then see **only the patients who added that email**, in a searchable list flagged **needs-review / reviewed**. Opening a patient shows:
+
+- profile (age, sex, height, weight, BMI, visits),
+- the **healing prediction** gauge,
+- **wound-area** and **tissue-composition** charts over time,
+- a **photo-review slider** through every uploaded wound image with its per-visit analysis,
+- a **Mark reviewed / un-review** control — a patient flips back to *needs review* automatically when they upload a new photo.
+
+It reads everything live from the Azure Functions (`get_doctor_patients`, `get_patient_history`, `get_patient_photos`). Deployable on Streamlit Community Cloud; secrets (`WOUNDWATCH_FUNCTION_URL/_KEY`, `FIREBASE_WEB_API_KEY`) are set in the app settings, never committed.
 
 ---
 
@@ -117,12 +147,22 @@ Wound-Monitoring/
 │   ├── endpoint.yml, deployment.yml    # managed online endpoint definitions                  (Shubam)
 │   └── functions/
 │       ├── host.json
-│       ├── requirements.txt            # azure-functions, requests, firebase-admin, azure-storage-blob
-│       ├── on_image_uploaded/          # Blob-trigger inference + DB writes                   (Prince)
-│       └── get_patient_history/        # read stored results for app + dashboard              (Prince)
+│       ├── requirements.txt            # azure-functions, firebase-admin (pinned), azure-storage-blob
+│       ├── on_image_uploaded/          # Blob-trigger inference + DB writes (with ML retry)   (Prince)
+│       ├── get_upload_url/             # signed SAS URL so the app uploads straight to Blob
+│       ├── get_download_url/           # signed SAS URL to read a stored photo back
+│       ├── save_profile/               # patient profile + doctor list -> Firestore
+│       ├── save_visit_meta/            # pain / symptoms / notes / wound location per photo
+│       ├── get_patient_history/        # read stored results for app + dashboard
+│       ├── get_patient_photos/         # a patient's photos with per-visit analysis + URLs
+│       ├── get_doctor_patients/        # a doctor's patients (matched by email), review flags
+│       ├── mark_reviewed/              # doctor marks a patient reviewed / un-reviewed
+│       └── delete_photo/               # delete a photo + recompute the healing metrics
 │
-└── dashboard/                          # NEW — Streamlit doctor dashboard                     (Varsha)
-    ├── app.py
+└── dashboard/                          # Streamlit doctor dashboard                           (Varsha)
+    ├── app.py                          # Firebase login -> patient list + search -> detail
+    ├── components/                      # patient card, prediction, charts, photo review
+    ├── utils/{backend.py, doctor_auth.py, helpers.py}
     └── requirements.txt
 ```
 
@@ -232,12 +272,14 @@ The full instructions are in the three deployment guides above. In short:
 
 | Field | Format | Example |
 |-------|--------|---------|
-| `case_id` (patient) | `CASE_NNN` | `CASE_001` |
-| `image_id` | `CASE_NNN_DAYN` | `CASE_001_DAY7` |
-| Blob path | `{patient_id}/{patient_id}_DAY{n}.jpg` | `CASE_001/CASE_001_DAY7.jpg` |
-| `visit_day` | integer | `0, 7, 14, 21` |
+| `patient_id` | Firebase Auth UID | `ZrUrYDhvz2OXCRWPJAT6oPbhwW72` |
+| `image_id` | `{patient_id}_DAY{n}_{capture_ms}` | `..72_DAY7_1723100000000` |
+| Blob path | `{patient_id}/{image_id}.jpg` | `..72/..72_DAY7_1723100000000.jpg` |
+| `visit_day` | integer (days since first photo) | `0, 7, 14, 21` |
 
-> The whole pipeline keys off the **filename** to know which photo is which day, so the app's upload path must follow the Blob path format exactly.
+> The pipeline keys off the **filename** to know which patient and day a photo is, so the app's upload path must follow this format exactly. The trailing capture-timestamp makes every photo a unique record (nothing overwrites, and several photos can share a day); the trend keeps the latest photo per day.
+>
+> *(The local `pipeline/` demo and `run_demo.py` still use the simpler `CASE_001` convention for test images — only the live app uses Firebase UIDs.)*
 
 ---
 
@@ -276,7 +318,8 @@ Tests cover the pure-Python logic (feature extraction, rule baseline, mask postp
 2. **Probabilities are not calibrated.** A score of 0.85 does **not** mean "85% likely to heal." Platt scaling / isotonic regression would be needed.
 3. **Tissue classifier may be biased** toward granulation on limited data. If the pipeline warns about "classifier collapse," do not trust the tissue percentages.
 4. **Longitudinal accuracy depends on real visits.** The cloud system uses real multi-visit photos (an improvement over the original single-image simulation), but a meaningful trend still needs several photos over time.
-5. **Not a medical device.** Research prototype only.
+5. **Wound area is in pixels, not absolute mm².** ArUco-marker calibration is implemented, but without a marker in frame the area is relative; it tracks the *trend* well but is sensitive to camera distance/angle between visits. Markerless scale (phone depth / autofocus) is future work.
+6. **Not a medical device.** Research prototype only.
 
 ---
 

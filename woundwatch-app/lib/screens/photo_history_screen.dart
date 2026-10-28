@@ -1,13 +1,13 @@
 // The "My Photos" tab: every wound photo the patient has taken, newest first,
 // grouped into weeks so a long history stays scannable. Tapping a photo opens
 // it full-screen with pinch-to-zoom.
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../models/wound_photo.dart';
 import '../providers/photos_provider.dart';
 import '../utils/constants.dart';
+import '../widgets/wound_image.dart';
 
 class PhotoHistoryScreen extends StatelessWidget {
   const PhotoHistoryScreen({super.key});
@@ -65,6 +65,33 @@ class _PhotoTile extends StatelessWidget {
   final WoundPhoto photo;
   const _PhotoTile({required this.photo});
 
+  Future<void> _confirmDelete(BuildContext context) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Delete this photo?'),
+        content: Text(
+            'Day ${photo.dayNumber} photo will be permanently removed, and your '
+            'healing trend will be recalculated without it. This cannot be undone.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete',
+                style: TextStyle(color: AppColors.healingBad)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !context.mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final done = await context.read<PhotosProvider>().deletePhoto(photo);
+    messenger.showSnackBar(SnackBar(
+        content: Text(done ? 'Photo deleted' : 'Couldn\'t delete photo')));
+  }
+
   @override
   Widget build(BuildContext context) {
     return Card(
@@ -81,18 +108,10 @@ class _PhotoTile extends StatelessWidget {
             children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(12),
-                child: Image.file(
-                  File(photo.localPath),
-                  width: 84,
-                  height: 84,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(
-                    width: 84,
-                    height: 84,
-                    color: AppColors.primaryLight,
-                    child: const Icon(Icons.image_not_supported,
-                        color: AppColors.primary),
-                  ),
+                child: WoundImage(
+                  localPath: photo.localPath,
+                  remoteUrl: photo.remoteUrl,
+                  size: 84,
                 ),
               ),
               const SizedBox(width: 14),
@@ -116,20 +135,22 @@ class _PhotoTile extends StatelessWidget {
                                   fontSize: 12)),
                         ),
                         const SizedBox(width: 8),
-                        Text(
-                          DateFormat('d MMM, h:mm a').format(photo.timestamp),
-                          style: const TextStyle(
-                              color: AppColors.textMuted, fontSize: 12),
+                        Expanded(
+                          child: Text(
+                            DateFormat('d MMM, h:mm a').format(photo.timestamp),
+                            style: const TextStyle(
+                                color: AppColors.textMuted, fontSize: 12),
+                          ),
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        const Text('Pain ',
-                            style: TextStyle(
-                                fontSize: 12, color: AppColors.textMuted)),
-                        ..._painDots(photo.painLevel),
+                        InkWell(
+                          onTap: () => _confirmDelete(context),
+                          borderRadius: BorderRadius.circular(20),
+                          child: const Padding(
+                            padding: EdgeInsets.all(4),
+                            child: Icon(Icons.delete_outline,
+                                size: 20, color: AppColors.textMuted),
+                          ),
+                        ),
                       ],
                     ),
                     if (photo.symptoms.isNotEmpty) ...[
@@ -161,28 +182,6 @@ class _PhotoTile extends StatelessWidget {
     );
   }
 
-  List<Widget> _painDots(int level) {
-    return List.generate(10, (i) {
-      final filled = i < level;
-      Color c;
-      if (level <= 3) {
-        c = AppColors.healingGood;
-      } else if (level <= 6) {
-        c = AppColors.healingWatch;
-      } else {
-        c = AppColors.healingBad;
-      }
-      return Container(
-        margin: const EdgeInsets.only(right: 3),
-        width: 8,
-        height: 8,
-        decoration: BoxDecoration(
-          color: filled ? c : const Color(0xFFD9E2DE),
-          shape: BoxShape.circle,
-        ),
-      );
-    });
-  }
 }
 
 class _FullscreenPhoto extends StatelessWidget {
@@ -202,7 +201,11 @@ class _FullscreenPhoto extends StatelessWidget {
         child: InteractiveViewer(
           minScale: 0.8,
           maxScale: 4,
-          child: Image.file(File(photo.localPath)),
+          child: WoundImage(
+            localPath: photo.localPath,
+            remoteUrl: photo.remoteUrl,
+            fit: BoxFit.contain,
+          ),
         ),
       ),
     );

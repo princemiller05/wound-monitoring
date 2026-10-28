@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
+import '../providers/photos_provider.dart';
 import '../utils/constants.dart';
 import 'home_screen.dart';
 import 'photo_history_screen.dart';
@@ -17,6 +18,21 @@ class MainScaffold extends StatefulWidget {
 
 class _MainScaffoldState extends State<MainScaffold> {
   int _index = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    // Pull this patient's photos + latest prediction back from the cloud so
+    // they show after reopening the app (not just within one session).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final patient = context.read<AuthProvider>().patient;
+      if (patient != null) {
+        final photos = context.read<PhotosProvider>();
+        photos.loadFromBackend(patient.uid);
+        photos.refreshPrediction(patient.uid);
+      }
+    });
+  }
 
   void _goToTab(int i) => setState(() => _index = i);
 

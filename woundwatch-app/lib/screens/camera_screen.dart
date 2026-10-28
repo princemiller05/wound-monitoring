@@ -1,8 +1,12 @@
+import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import 'package:sensors_plus/sensors_plus.dart';
 import '../providers/photos_provider.dart';
+import '../services/image_quality.dart';
 import '../utils/constants.dart';
 import 'preview_screen.dart';
 
@@ -20,6 +24,47 @@ class _CameraScreenState extends State<CameraScreen> {
   final _picker = ImagePicker();
   bool _busy = false;
 
+  // Hold-steady: smoothed linear-acceleration magnitude (0 when still).
+  StreamSubscription? _accelSub;
+  Timer? _sensorFallback;
+  bool _gotSensor = false;
+  double _motion = 0;
+  bool _steady = false;
+  static const double _steadyThreshold = 0.45; // m/s^2 of movement
+
+  @override
+  void initState() {
+    super.initState();
+    try {
+      _accelSub = userAccelerometerEventStream().listen((e) {
+        _gotSensor = true;
+        final mag = sqrt(e.x * e.x + e.y * e.y + e.z * e.z);
+        _motion = _motion * 0.8 + mag * 0.2; // low-pass smoothing
+        final steadyNow = _motion < _steadyThreshold;
+        if (steadyNow != _steady && mounted) {
+          setState(() => _steady = steadyNow);
+        }
+      }, onError: (_) => _enableWithoutSensor());
+    } catch (_) {
+      _enableWithoutSensor();
+    }
+    // If no sensor data arrives (emulator / no sensor), don't block capture.
+    _sensorFallback = Timer(const Duration(seconds: 2), () {
+      if (!_gotSensor) _enableWithoutSensor();
+    });
+  }
+
+  void _enableWithoutSensor() {
+    if (mounted && !_steady) setState(() => _steady = true);
+  }
+
+  @override
+  void dispose() {
+    _accelSub?.cancel();
+    _sensorFallback?.cancel();
+    super.dispose();
+  }
+
   Future<void> _capture(ImageSource source) async {
     if (_busy) return;
     setState(() => _busy = true);
@@ -34,7 +79,31 @@ class _CameraScreenState extends State<CameraScreen> {
         setState(() => _busy = false);
         return;
       }
-      final dayNumber = context.read<PhotosProvider>().nextDayNumber();
+
+      // On-device quality gate: reject blurry / badly-lit photos before saving.
+      final quality = await ImageQuality.check(File(file.path));
+      if (!mounted) return;
+      if (!quality.ok) {
+        setState(() => _busy = false);
+        await _showRetake(quality.reason!);
+        return;
+      }
+
+      // Duplicate check: is this essentially the same as the last photo?
+      final photos = context.read<PhotosProvider>();
+      final last = photos.lastCaptureHash;
+      if (last != null &&
+          ImageQuality.hamming(quality.hash, last) <=
+              ImageQuality.duplicateMaxHamming) {
+        setState(() => _busy = false);
+        await _showRetake(
+            'This looks like the same photo as last time. Take a fresh '
+            'photo of the wound so the trend stays accurate.');
+        return;
+      }
+      photos.lastCaptureHash = quality.hash;
+
+      final dayNumber = photos.nextDayNumber();
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
@@ -53,6 +122,24 @@ class _CameraScreenState extends State<CameraScreen> {
         );
       }
     }
+  }
+
+  Future<void> _showRetake(String reason) async {
+    await showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        icon: const Icon(Icons.image_not_supported_outlined,
+            color: AppColors.healingWatch, size: 32),
+        title: const Text("Let's retake that"),
+        content: Text(reason),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK, retake'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -88,11 +175,14 @@ class _CameraScreenState extends State<CameraScreen> {
                 textAlign: TextAlign.center,
                 style: TextStyle(color: AppColors.textMuted),
               ),
-              const SizedBox(height: 40),
+              const SizedBox(height: 28),
+              _SteadyIndicator(steady: _steady),
+              const SizedBox(height: 14),
               ElevatedButton.icon(
-                onPressed: _busy ? null : () => _capture(ImageSource.camera),
+                onPressed:
+                    (_busy || !_steady) ? null : () => _capture(ImageSource.camera),
                 icon: const Icon(Icons.camera_alt),
-                label: const Text('Open Camera'),
+                label: Text(_steady ? 'Open Camera' : 'Hold steady…'),
               ),
               const SizedBox(height: 12),
               OutlinedButton.icon(
@@ -112,6 +202,34 @@ class _CameraScreenState extends State<CameraScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Live hold-steady chip: green when the phone is still, amber while it moves.
+class _SteadyIndicator extends StatelessWidget {
+  final bool steady;
+  const _SteadyIndicator({required this.steady});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = steady ? AppColors.healingGood : AppColors.healingWatch;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(steady ? Icons.check_circle : Icons.vibration,
+              size: 18, color: color),
+          const SizedBox(width: 8),
+          Text(steady ? 'Steady — ready to shoot' : 'Hold the phone steady…',
+              style: TextStyle(color: color, fontWeight: FontWeight.w600)),
+        ],
       ),
     );
   }

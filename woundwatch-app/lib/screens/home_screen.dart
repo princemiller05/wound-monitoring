@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -6,6 +5,7 @@ import '../providers/auth_provider.dart';
 import '../providers/photos_provider.dart';
 import '../utils/constants.dart';
 import '../theme/app_theme.dart';
+import '../widgets/wound_image.dart';
 import 'camera_screen.dart';
 import 'import_photos_screen.dart';
 import 'doctors_screen.dart';
@@ -321,7 +321,7 @@ class _RecentPhotosRow extends StatelessWidget {
     }
 
     return SizedBox(
-      height: 150,
+      height: 168,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: photos.length,
@@ -334,18 +334,10 @@ class _RecentPhotosRow extends StatelessWidget {
             children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(10),
-                child: Image.file(
-                  File(p.localPath),
-                  width: 100,
-                  height: 100,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(
-                    width: 100,
-                    height: 100,
-                    color: AppColors.primaryLight,
-                    child: const Icon(Icons.image_not_supported_outlined,
-                        color: AppColors.primary),
-                  ),
+                child: WoundImage(
+                  localPath: p.localPath,
+                  remoteUrl: p.remoteUrl,
+                  size: 100,
                 ),
               ),
               const SizedBox(height: 7),
